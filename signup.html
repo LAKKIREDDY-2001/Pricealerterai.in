@@ -145,6 +145,12 @@
     </div>
 
     <script>
+        // Clear old test data if needed (for development/testing)
+        if (window.location.search.includes('clear=true')) {
+            localStorage.removeItem('pa_users_v2');
+            localStorage.removeItem('pa_current_user');
+        }
+        
         const usersKey = 'pa_users_v2';
         
         const showError = (msg) => {
