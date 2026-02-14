@@ -1,7 +1,6 @@
 import os
 import re
 import sqlite3
-import threading
 import random
 import string
 import json
@@ -12,8 +11,6 @@ from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
 from werkzeug.security import generate_password_hash, check_password_hash
-from collections import Counter
-import time
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -94,7 +91,7 @@ WHATSAPP_CONFIG = load_json_config('whatsapp_config.json', {
 def send_mail(to_email, subject, html_body, text_body=None):
     if not EMAIL_CONFIG['enabled']:
         print(f"\n{'='*60}")
-        print(f"📧 EMAIL SENT - DEMO MODE")
+        print("📧 EMAIL SENT - DEMO MODE")
         print(f"{'='*60}")
         print(f"To: {to_email}")
         print(f"Subject: {subject}")
@@ -298,23 +295,23 @@ def blog():
 
 @app.route('/blog/how-to-track-product-prices-online')
 def blog_track_prices():
-    """Blog post 1"""
-    return render_template('blog_track_prices.html')
+    """Blog post 1 slug - currently routed to blog listing."""
+    return redirect(url_for('blog'))
 
 @app.route('/blog/best-price-alert-tools-india')
 def blog_best_tools():
-    """Blog post 2"""
-    return render_template('blog_best_tools.html')
+    """Blog post 2 slug - currently routed to blog listing."""
+    return redirect(url_for('blog'))
 
 @app.route('/blog/save-money-price-trackers')
 def blog_save_money():
-    """Blog post 3"""
-    return render_template('blog_save_money.html')
+    """Blog post 3 slug - currently routed to blog listing."""
+    return redirect(url_for('blog'))
 
 @app.route('/blog/amazon-price-history')
 def blog_amazon_history():
-    """Blog post 4"""
-    return render_template('blog_amazon_history.html')
+    """Blog post 4 slug - currently routed to blog listing."""
+    return redirect(url_for('blog'))
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -394,7 +391,6 @@ def signup_complete():
     data = request.get_json()
     signup_token = data.get('signupToken')
     email_otp = data.get('emailOTP', '')
-    phone_otp = data.get('phoneOTP', '')
     
     if not signup_token:
         return jsonify({"error": "Signup token is required"}), 400
@@ -533,9 +529,14 @@ def forgot_password():
             """, (user[0], reset_token, expiry.isoformat()))
             conn.commit()
             conn.close()
-            send_password_reset_email(email, reset_token)
+            return jsonify({
+                "success": True,
+                "message": "Reset link generated",
+                "reset_link": f"/reset-password?token={reset_token}"
+            }), 200
+        return jsonify({"error": "No account found for this email"}), 404
         
-        return jsonify({"success": True, "message": "If an account exists, a reset link has been sent"}), 200
+        return jsonify({"error": "Unable to process request"}), 500
     
     return render_template('forgot-password.html')
 
@@ -601,7 +602,7 @@ def get_user():
         return jsonify({"id": user[0], "username": user[1], "email": user[2], "phone": user[3]})
     return jsonify({"error": "User not found"}), 404
 
-@app.route('/api/trackers', methods=['GET', 'POST', 'DELETE'])
+@app.route('/api/trackers', methods=['GET', 'POST', 'DELETE', 'PUT'])
 def trackers():
     if 'user_id' not in session:
         return jsonify({"error": "Not logged in"}), 401
@@ -643,12 +644,142 @@ def trackers():
         conn.close()
         return jsonify({"message": "Tracker deleted"})
 
+    if request.method == 'PUT':
+        data = request.json or {}
+        tracker_id = data.get('id')
+        if not tracker_id:
+            conn.close()
+            return jsonify({"error": "Tracker id is required"}), 400
+
+        cursor.execute("""
+            UPDATE trackers
+            SET current_price = ?, product_name = ?, currency = ?, currency_symbol = ?
+            WHERE id = ? AND user_id = ?
+        """, (
+            data.get('currentPrice'),
+            data.get('productName'),
+            data.get('currency', 'USD'),
+            data.get('currencySymbol', '$'),
+            tracker_id,
+            session['user_id']
+        ))
+        conn.commit()
+        updated_rows = cursor.rowcount
+        conn.close()
+        if updated_rows == 0:
+            return jsonify({"error": "Tracker not found"}), 404
+        return jsonify({"message": "Tracker updated"})
+
+# ==================== PASSWORD RESET API ROUTES ====================
+
+@app.route('/api/forgot-password', methods=['POST'])
+def api_forgot_password():
+    """API endpoint for forgot password - handles JSON requests"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+    
+    email = data.get('email')
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+    
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if user:
+        reset_token = secrets.token_urlsafe(32)
+        expiry = datetime.now() + timedelta(minutes=30)
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO password_resets (user_id, reset_token, reset_token_expiry)
+            VALUES (?, ?, ?)
+        """, (user[0], reset_token, expiry.isoformat()))
+        conn.commit()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "message": "Reset link generated",
+            "reset_link": f"/reset-password?token={reset_token}"
+        }), 200
+    
+    return jsonify({"error": "No account found for this email"}), 404
+
+@app.route('/api/reset-password', methods=['POST'])
+def api_reset_password():
+    """API endpoint for reset password - handles JSON requests"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+    
+    token = data.get('token')
+    password = data.get('password')
+    
+    if not token:
+        return jsonify({"error": "Token is required"}), 400
+    
+    if not password or len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+    
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, reset_token_expiry FROM password_resets WHERE reset_token = ?", (token,))
+    reset_record = cursor.fetchone()
+    
+    if not reset_record:
+        conn.close()
+        return jsonify({"error": "Invalid or expired reset link"}), 400
+    
+    expiry = datetime.fromisoformat(reset_record[1]) if reset_record[1] else None
+    if expiry and datetime.now() > expiry:
+        conn.close()
+        return jsonify({"error": "Reset link has expired"}), 400
+    
+    user_id = reset_record[0]
+    hashed = generate_password_hash(password)
+    cursor.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, user_id))
+    cursor.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"success": True, "message": "Password reset successful"}), 200
+
 # ==================== PRICE TRACKING ====================
 
 def parse_price(price_str):
     if not price_str:
         return None
-    price_str = re.sub(r'[^\d.]', '', price_str)
+    price_str = str(price_str).strip()
+    price_str = re.sub(r'[^\d,.-]', '', price_str)
+    price_str = re.sub(r'^[^\d]+', '', price_str)
+    price_str = re.sub(r'[^\d]+$', '', price_str)
+    if not price_str:
+        return None
+
+    # Normalize values like 1,23,456.78 / 1,999 / 1.234,56 into parseable float format.
+    if ',' in price_str and '.' in price_str:
+        if re.match(r'^\d{1,3}(\.\d{3})+,\d{1,2}$', price_str):
+            # European thousand+decimal format: 1.234,56
+            price_str = price_str.replace('.', '').replace(',', '.')
+        elif re.match(r'^\d{1,3}(,\d{3})+(\.\d+)?$', price_str):
+            # US/IN thousand format: 1,234.56 or 1,23,456.78
+            price_str = price_str.replace(',', '')
+        else:
+            # Fallback to decimal comma if comma appears later.
+            if price_str.rfind(',') > price_str.rfind('.'):
+                price_str = price_str.replace('.', '').replace(',', '.')
+            else:
+                price_str = price_str.replace(',', '')
+    else:
+        if ',' in price_str:
+            parts = price_str.split(',')
+            if len(parts[-1]) == 2:
+                price_str = '.'.join(parts)
+            else:
+                price_str = ''.join(parts)
     try:
         return float(price_str)
     except ValueError:
@@ -656,47 +787,174 @@ def parse_price(price_str):
 
 def get_site_info(url):
     url_lower = url.lower()
-    if 'amazon' in url_lower:
-        if 'amazon.in' in url_lower:
-            return 'amazon', 'INR', '₹'
-        elif 'amazon.co.uk' in url_lower:
-            return 'amazon', 'GBP', '£'
-        else:
-            return 'amazon', 'USD', '$'
-    elif 'flipkart' in url_lower:
-        return 'flipkart', 'INR', '₹'
-    elif 'myntra' in url_lower:
-        return 'myntra', 'INR', '₹'
-    elif 'ajio' in url_lower:
-        return 'ajio', 'INR', '₹'
-    elif 'meesho' in url_lower:
-        return 'meesho', 'INR', '₹'
-    elif 'snapdeal' in url_lower:
-        return 'snapdeal', 'INR', '₹'
-    else:
-        return 'unknown', 'USD', '$'
+    domain_rules = [
+        ([
+            'amazon.in', 'flipkart.com', 'myntra.com', 'ajio.com', 'meesho.com', 'snapdeal.com',
+            'tatacliq.com', 'reliancedigital.in', 'jiomart.com', 'nykaa.com', 'croma.com',
+            'vijaysales.com', 'shopsy.in', 'firstcry.com', 'pepperfry.com', '1mg.com',
+            'tata1mg.com', 'netmeds.com', 'bigbasket.com'
+        ], 'INR', '₹'),
+        (['amazon.co.uk'], 'GBP', '£'),
+        (['amazon.com', 'ebay.com', 'walmart.com', 'bestbuy.com', 'target.com'], 'USD', '$'),
+    ]
+    for domains, currency, symbol in domain_rules:
+        if any(domain in url_lower for domain in domains):
+            return 'generic', currency, symbol
+    return 'generic', 'USD', '$'
 
 def scrape_price(soup, site, currency_symbol):
-    """Generic price scraper"""
-    if site == 'amazon':
-        price_elem = soup.find("span", {"class": "a-price"})
-        if price_elem:
-            whole = price_elem.find("span", {"class": "a-price-whole"})
-            if whole:
-                price = parse_price(whole.get_text())
-                if price:
-                    return price
-    
-    if site in ['flipkart', 'myntra', 'ajio', 'meesho', 'snapdeal']:
-        price_elem = soup.find(string=lambda t: t and '₹' in t)
-        if price_elem:
-            nums = re.findall(r'₹\s*([\d,]+\.?\d*)', price_elem)
-            for match in nums:
-                price = parse_price(match.replace(',', ''))
-                if price and 50 < price < 100000:
-                    return price
-    
+    """Broader price scraper for multiple e-commerce templates."""
+    def valid_price(value):
+        return value is not None and 1 <= value <= 20000000
+
+    # 1) Structured data (JSON-LD) used by many stores.
+    for script in soup.find_all('script', {'type': 'application/ld+json'}):
+        content = script.string or script.get_text()
+        if not content:
+            continue
+        try:
+            data = json.loads(content)
+        except Exception:
+            continue
+        queue = data if isinstance(data, list) else [data]
+        while queue:
+            item = queue.pop(0)
+            if isinstance(item, dict):
+                offers = item.get('offers')
+                if isinstance(offers, dict):
+                    price = parse_price(offers.get('price'))
+                    if valid_price(price):
+                        return price
+                elif isinstance(offers, list):
+                    for offer in offers:
+                        if isinstance(offer, dict):
+                            price = parse_price(offer.get('price'))
+                            if valid_price(price):
+                                return price
+                for value in item.values():
+                    if isinstance(value, (dict, list)):
+                        queue.append(value)
+            elif isinstance(item, list):
+                queue.extend(item)
+
+    # 2) Common meta/itemprop tags.
+    meta_selectors = [
+        ('meta', {'property': 'product:price:amount'}, 'content'),
+        ('meta', {'property': 'og:price:amount'}, 'content'),
+        ('meta', {'name': 'twitter:data1'}, 'content'),
+        ('meta', {'itemprop': 'price'}, 'content'),
+        ('meta', {'name': 'price'}, 'content'),
+    ]
+    for tag, attrs, attr_name in meta_selectors:
+        elem = soup.find(tag, attrs)
+        if elem and elem.get(attr_name):
+            price = parse_price(elem.get(attr_name))
+            if valid_price(price):
+                return price
+
+    # 3) Common e-commerce selectors.
+    selector_candidates = [
+        '#priceblock_ourprice', '#priceblock_dealprice', '.a-price .a-offscreen',
+        '._30jeq3', '._16Jk6d', '.Nx9bqj', '.CEmiEU',  # Flipkart variants
+        '.pdp-price', '.product-price', '.price', '.sale-price', '.final-price',
+        '[data-testid="price"]', '[itemprop="price"]', '[class*="price"]'
+    ]
+    for selector in selector_candidates:
+        for elem in soup.select(selector):
+            text = elem.get('content') or elem.get_text(' ', strip=True)
+            price = parse_price(text)
+            if valid_price(price):
+                return price
+
+    # 4) Regex fallback for currency text in page.
+    text = soup.get_text(' ', strip=True)
+    currency_patterns = [
+        r'₹\s*([0-9][0-9,]*\.?[0-9]{0,2})',
+        r'Rs\.?\s*([0-9][0-9,]*\.?[0-9]{0,2})',
+        r'INR\s*([0-9][0-9,]*\.?[0-9]{0,2})',
+        r'\$\s*([0-9][0-9,]*\.?[0-9]{0,2})',
+        r'£\s*([0-9][0-9,]*\.?[0-9]{0,2})'
+    ]
+    for pattern in currency_patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            price = parse_price(match)
+            if valid_price(price):
+                return price
+
     return None
+
+def extract_product_name(soup, url):
+    """Extract a cleaner product name for tracker cards."""
+    candidates = []
+
+    # Site-specific + common title selectors.
+    selector_candidates = [
+        '#productTitle',                 # Amazon
+        'h1.B_NuCI',                     # Flipkart
+        'h1.pdp-name',                   # Myntra-like
+        'h1[itemprop="name"]',
+        'meta[property="og:title"]',
+        'meta[name="twitter:title"]',
+        'meta[name="title"]',
+        'h1'
+    ]
+    for selector in selector_candidates:
+        for elem in soup.select(selector):
+            text = elem.get('content') or elem.get_text(' ', strip=True)
+            if text:
+                candidates.append(text.strip())
+
+    if soup.title and soup.title.get_text(strip=True):
+        candidates.append(soup.title.get_text(' ', strip=True))
+
+    # Remove noisy/generic strings.
+    junk_phrases = [
+        'add to your order',
+        'amazon.in',
+        'amazon.com',
+        'flipkart.com',
+        'shop online',
+        'buy online',
+        'best prices in india'
+    ]
+
+    def clean_name(name):
+        name = re.sub(r'\s+', ' ', name or '').strip()
+        name = re.sub(
+            r'\s*[-|]\s*(Amazon|Amazon\.in|Flipkart|Myntra|Ajio|Meesho|Snapdeal|Tata CLiQ|Reliance Digital|Nykaa|Croma|JioMart|Vijay Sales|Shopsy|FirstCry|Pepperfry|Tata 1mg|BigBasket)\s*$',
+            '',
+            name,
+            flags=re.IGNORECASE
+        ).strip()
+        # Remove common ecommerce suffix noise.
+        name = re.sub(
+            r'\s*online\s+at\s+best\s+prices?\s+in\s+india\.?\s*$',
+            '',
+            name,
+            flags=re.IGNORECASE
+        ).strip()
+        return name
+
+    for raw in candidates:
+        name = clean_name(raw)
+        lowered = name.lower()
+        if len(name) < 6:
+            continue
+        if any(phrase in lowered for phrase in junk_phrases):
+            continue
+        return name
+
+    # Fallback to URL slug when page title is noisy.
+    try:
+        slug = re.sub(r'[-_]+', ' ', url.split('/')[-1]).strip()
+        slug = re.sub(r'\?.*$', '', slug).strip()
+        if len(slug) >= 6:
+            return slug.title()
+    except Exception:
+        pass
+
+    return "Product"
 
 @app.route('/get-price', methods=['POST'])
 def get_price():
@@ -730,11 +988,7 @@ def get_price():
         site, currency, currency_symbol = get_site_info(url)
         price = scrape_price(soup, site, currency_symbol)
         
-        # Try to get product name from title
-        product_name = "Product"
-        if soup.title:
-            title = soup.title.get_text().strip()
-            product_name = re.sub(r'\s*[-|]\s*(Amazon|Flipkart|Myntra|Ajio|Meesho|Snapdeal)\s*$', '', title, flags=re.IGNORECASE).strip()
+        product_name = extract_product_name(soup, url)
         
         if price is None:
             return jsonify({"error": "Could not find price on this page"}), 404

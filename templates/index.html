@@ -9,12 +9,13 @@
     <meta name="keywords" content="price tracker, price alert, sign up, register, amazon price tracker, flipkart price tracker, myntra price alert, save money shopping">
     <meta property="og:title" content="Sign Up - AI Price Alert | Never Miss a Price Drop">
     <meta property="og:description" content="Create your free account and start tracking prices across 100+ stores. Save money on every purchase!">
-    <meta property="og:image" content="https://aipricealert.com/static/og-image.png">
+    <meta property="og:image" content="https://aipricealert.com/static/brand/og-image.png">
     <meta property="og:url" content="https://aipricealert.com/dashboard">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Sign Up - AI Price Alert">
     <meta name="twitter:description" content="Never miss a price drop again! Track prices across 100+ stores.">
+    <meta name="twitter:image" content="https://aipricealert.com/static/brand/og-image.png">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'><text y=\'.9em\' font-size=\'90\'>🔔</text></svg>">
     <link rel="canonical" href="https://aipricealert.com/dashboard">
     <link rel="stylesheet" href="/static/style.css">
@@ -85,6 +86,10 @@
                         <i class="fa fa-check"></i>
                         Awesome!
                     </button>
+                    <button class="celebration-btn secondary" onclick="stopCelebrations()">
+                        <i class="fa fa-ban"></i>
+                        Stop Celebrations
+                    </button>
                 </div>
             </div>
             
@@ -129,6 +134,7 @@
                 <h3 style="margin-bottom: 30px; display: none;">🔔 AI Tracker</h3>
                 <div class="nav-item active" data-view="new-alert"><i class="fa fa-plus-circle"></i> <span>New Alert</span></div>
                 <div class="nav-item" data-view="my-trackers"><i class="fa fa-list"></i> <span>My Trackers</span></div>
+                <div class="nav-item" data-view="live-price"><i class="fa fa-line-chart"></i> <span>Live Price</span></div>
                 <div class="nav-item" data-view="price-trends"><i class="fa fa-chart-line"></i> <span>Price Trends</span></div>
                 <div class="nav-item" data-view="settings"><i class="fa fa-gear"></i> <span>Settings</span></div>
                 
@@ -152,7 +158,7 @@
                         <h1 class="gradient-text">Paste Link. Save Money.</h1>
                         <p style="color: #666; margin-bottom: 40px;">The AI tracks the price 24/7 and sends you a notification the second it drops.</p>
                         
-                        <input type="text" id="urlInput" class="product-input" placeholder="Paste Amazon, Flipkart, Myntra, Ajio, Meesho, Snapdeal, Tata CLiQ, or Reliance Digital link here...">
+                        <input type="text" id="urlInput" class="product-input" placeholder="Paste product links from Amazon, Flipkart, Myntra, Ajio, Meesho, Snapdeal, Tata CLiQ, Reliance Digital, Nykaa, Croma, JioMart, and more...">
                         
                         <div id="priceStep" style="display: none;">
                             <p><strong>Set Target Price:</strong></p>
@@ -165,14 +171,23 @@
                         </button>
                         
                         <div class="supported-sites">
-                            <span><i class="fa fa-amazon"></i> Amazon</span>
-                            <span><i class="fa fa-shopping-cart"></i> Flipkart</span>
-                            <span><i class="fa fa-tag"></i> Myntra</span>
-                            <span><i class="fa fa-shopping-bag"></i> Ajio</span>
-                            <span><i class="fa fa-mobile"></i> Meesho</span>
-                            <span><i class="fa fa-shopping-cart"></i> Snapdeal</span>
-                            <span><i class="fa fa-store"></i> Tata CLiQ</span>
-                            <span><i class="fa fa-laptop"></i> Reliance Digital</span>
+                            <a href="https://www.amazon.in" target="_blank" rel="noopener noreferrer" aria-label="Amazon"><img src="/static/brand/sites/amazon.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Amazon</a>
+                            <a href="https://www.flipkart.com" target="_blank" rel="noopener noreferrer" aria-label="Flipkart"><img src="/static/brand/sites/flipkart.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Flipkart</a>
+                            <a href="https://www.myntra.com" target="_blank" rel="noopener noreferrer" aria-label="Myntra"><img src="/static/brand/sites/myntra.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Myntra</a>
+                            <a href="https://www.ajio.com" target="_blank" rel="noopener noreferrer" aria-label="Ajio"><img src="/static/brand/sites/ajio.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Ajio</a>
+                            <a href="https://www.meesho.com" target="_blank" rel="noopener noreferrer" aria-label="Meesho"><img src="/static/brand/sites/meesho.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Meesho</a>
+                            <a href="https://www.snapdeal.com" target="_blank" rel="noopener noreferrer" aria-label="Snapdeal"><img src="/static/brand/sites/snapdeal.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Snapdeal</a>
+                            <a href="https://www.tatacliq.com" target="_blank" rel="noopener noreferrer" aria-label="Tata CLiQ"><img src="/static/brand/sites/tatacliq.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Tata CLiQ</a>
+                            <a href="https://www.reliancedigital.in" target="_blank" rel="noopener noreferrer" aria-label="Reliance Digital"><img src="/static/brand/sites/reliancedigital.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Reliance Digital</a>
+                            <a href="https://www.nykaa.com" target="_blank" rel="noopener noreferrer" aria-label="Nykaa"><img src="/static/brand/sites/nykaa.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Nykaa</a>
+                            <a href="https://www.croma.com" target="_blank" rel="noopener noreferrer" aria-label="Croma"><img src="/static/brand/sites/croma.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Croma</a>
+                            <a href="https://www.jiomart.com" target="_blank" rel="noopener noreferrer" aria-label="JioMart"><img src="/static/brand/sites/jiomart.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> JioMart</a>
+                            <a href="https://www.vijaysales.com" target="_blank" rel="noopener noreferrer" aria-label="Vijay Sales"><img src="/static/brand/sites/vijaysales.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Vijay Sales</a>
+                            <a href="https://www.shopsy.in" target="_blank" rel="noopener noreferrer" aria-label="Shopsy"><img src="/static/brand/sites/shopsy.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Shopsy</a>
+                            <a href="https://www.firstcry.com" target="_blank" rel="noopener noreferrer" aria-label="FirstCry"><img src="/static/brand/sites/firstcry.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> FirstCry</a>
+                            <a href="https://www.pepperfry.com" target="_blank" rel="noopener noreferrer" aria-label="Pepperfry"><img src="/static/brand/sites/pepperfry.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Pepperfry</a>
+                            <a href="https://www.1mg.com" target="_blank" rel="noopener noreferrer" aria-label="Tata 1mg"><img src="/static/brand/sites/tata1mg.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> Tata 1mg</a>
+                            <a href="https://www.bigbasket.com" target="_blank" rel="noopener noreferrer" aria-label="BigBasket"><img src="/static/brand/sites/bigbasket.png?v=4" class="supported-site-logo" alt="" onerror="this.src='/static/brand/sites/generic.png?v=4'"> BigBasket</a>
                         </div>
                         
                         <!-- AdSense Ad Container -->
@@ -251,11 +266,22 @@
                             </button>
                         </div>
                     </div>
-                    
+
                     <div class="bulk-actions" id="bulk-actions" style="display: none;">
                         <span id="selected-count">0 selected</span>
                         <button class="btn-secondary" onclick="deleteSelected()"><i class="fa fa-trash"></i> Delete Selected</button>
                         <button class="btn-secondary" onclick="exportTrackers()"><i class="fa fa-download"></i> Export</button>
+                    </div>
+                </div>
+
+                <!-- Live Price View -->
+                <div id="view-live-price" class="view live-price-view">
+                    <div class="live-tracking-section">
+                        <div class="live-tracking-header">
+                            <h2><i class="fa fa-line-chart"></i> Live Price Tracking</h2>
+                            <p>Track product growth from first recorded price to current price.</p>
+                        </div>
+                        <div id="live-price-grid" class="live-tracking-grid"></div>
                     </div>
                 </div>
 
@@ -604,7 +630,15 @@
                                     <option value="snapdeal">Snapdeal</option>
                                     <option value="tatacliq">Tata CLiQ</option>
                                     <option value="reliancedigital">Reliance Digital</option>
-                                    <option value="ebay">eBay</option>
+                                    <option value="nykaa">Nykaa</option>
+                                    <option value="croma">Croma</option>
+                                    <option value="jiomart">JioMart</option>
+                                    <option value="vijaysales">Vijay Sales</option>
+                                    <option value="shopsy">Shopsy</option>
+                                    <option value="firstcry">FirstCry</option>
+                                    <option value="pepperfry">Pepperfry</option>
+                                    <option value="tata1mg">Tata 1mg</option>
+                                    <option value="bigbasket">BigBasket</option>
                                 </select>
                             </div>
                         </div>
@@ -676,4 +710,3 @@
     <script src="/static/ads.js"></script>
 </body>
 </html>
-

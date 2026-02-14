@@ -689,24 +689,12 @@ async function handleForgotPassword(e) {
         const data = await response.json();
 
         if (response.ok) {
-            // Show success message inline (works on all pages)
-            const authForm = document.querySelector('.auth-form');
-            if (authForm) {
-                authForm.innerHTML = `
-                    <div style="text-align: center; padding: 20px 0;">
-                        <i class="fa fa-check-circle" style="font-size: 64px; color: #4caf50; margin-bottom: 20px;"></i>
-                        <h2 style="margin-bottom: 12px;">Check your email</h2>
-                        <p style="color: #666; margin-bottom: 24px;">We've sent password reset instructions to ${email}</p>
-                        <p style="color: #888; font-size: 13px; margin-bottom: 24px;">Click the link in the email to reset your password. The link expires in 30 minutes.</p>
-                        <a href="/login" class="auth-btn" style="display: inline-block; text-decoration: none;">
-                            <i class="fa fa-arrow-left"></i> Back to Login
-                        </a>
-                    </div>
-                `;
+            if (data.reset_link) {
+                showToast('success', 'Redirecting to reset password...');
+                window.location.href = data.reset_link;
+                return;
             }
-
-            // Also show toast notification
-            showToast('success', 'Password reset instructions sent!');
+            showToast('success', 'Reset link generated');
         } else {
             showError(data.error || 'Failed to send reset link', errorMessage?.id || 'error-message');
             if (submitBtn) {

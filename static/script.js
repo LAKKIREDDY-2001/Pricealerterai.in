@@ -3,6 +3,10 @@ let trackers = [];
 let currentFilter = 'all';
 let currentTracker = null;
 let celebrationTracker = null;
+let appInitialized = false;
+let currentTrendPeriod = '7d';
+const MAX_HISTORY_POINTS = 240;
+const livePeriodByTracker = {};
 
 // Backend API configuration
 const getApiBaseUrl = () => {
@@ -20,13 +24,207 @@ const celebrationColors = [
     '#54a0ff', '#5f27cd', '#00d2d3', '#ff9f0a'
 ];
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadTrackers();
-    setupNavigation();
-    loadUserData();
-    initTilt();
-    initCelebration();
-});
+function normalizeHistory(history) {
+    if (!Array.isArray(history)) return [];
+    return history
+        .map(point => ({
+            ts: Number(point.ts || Date.now()),
+            price: Number(point.price)
+        }))
+        .filter(point => Number.isFinite(point.price))
+        .sort((a, b) => a.ts - b.ts);
+}
+
+function addPriceHistoryPoint(tracker, price) {
+    if (!tracker) return;
+    tracker.priceHistory = normalizeHistory(tracker.priceHistory);
+    const now = Date.now();
+    const numericPrice = Number(price);
+    if (!Number.isFinite(numericPrice)) return;
+
+    const lastPoint = tracker.priceHistory[tracker.priceHistory.length - 1];
+    if (lastPoint && Math.abs(lastPoint.price - numericPrice) < 0.0001 && now - lastPoint.ts < 30000) {
+        return;
+    }
+
+    tracker.priceHistory.push({ ts: now, price: numericPrice });
+    if (tracker.priceHistory.length > MAX_HISTORY_POINTS) {
+        tracker.priceHistory = tracker.priceHistory.slice(-MAX_HISTORY_POINTS);
+    }
+}
+
+function mergeTrackersWithLocalHistory(serverTrackers) {
+    const cachedTrackers = JSON.parse(localStorage.getItem('trackers') || '[]');
+    const cachedById = new Map(cachedTrackers.map(t => [String(t.id), t]));
+
+    return serverTrackers.map(tracker => {
+        const cached = cachedById.get(String(tracker.id));
+        if (cached && cached.priceHistory) {
+            tracker.priceHistory = normalizeHistory(cached.priceHistory);
+        }
+        addPriceHistoryPoint(tracker, tracker.currentPrice);
+        return tracker;
+    });
+}
+
+function buildSparklineSvg(history) {
+    const points = normalizeHistory(history);
+    if (points.length < 2) {
+        return '<span class="sparkline-empty">Waiting for live data...</span>';
+    }
+
+    const width = 240;
+    const height = 56;
+    const padding = 6;
+    const minPrice = Math.min(...points.map(p => p.price));
+    const maxPrice = Math.max(...points.map(p => p.price));
+    const priceRange = maxPrice - minPrice || 1;
+    const stepX = (width - padding * 2) / (points.length - 1);
+
+    const coords = points.map((point, index) => {
+        const x = padding + index * stepX;
+        const normalized = (point.price - minPrice) / priceRange;
+        const y = height - padding - normalized * (height - padding * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+
+    const strokeClass = points[points.length - 1].price <= points[0].price ? 'down' : 'up';
+    return `<svg viewBox="0 0 ${width} ${height}" class="sparkline-svg" preserveAspectRatio="none"><polyline class="sparkline-line ${strokeClass}" points="${coords}" /></svg>`;
+}
+
+function getHistoryForPeriod(tracker, period) {
+    const history = normalizeHistory(tracker?.priceHistory);
+    if (history.length === 0) return [];
+
+    const now = Date.now();
+    let days = 7;
+    if (period === '30d') days = 30;
+    if (period === '90d') days = 90;
+    const cutoff = now - days * 24 * 60 * 60 * 1000;
+    const filtered = history.filter(point => point.ts >= cutoff);
+    return filtered.length > 1 ? filtered : history;
+}
+
+function getHistoryForLiveRange(tracker, rangeKey) {
+    const history = normalizeHistory(tracker?.priceHistory);
+    if (history.length === 0) return [];
+    if (rangeKey === 'all') return history;
+
+    const now = Date.now();
+    let days = 30;
+    if (rangeKey === '1d') days = 1;
+    if (rangeKey === '1m') days = 30;
+    if (rangeKey === '1y') days = 365;
+    if (rangeKey === '5y') days = 365 * 5;
+    const cutoff = now - days * 24 * 60 * 60 * 1000;
+    const filtered = history.filter(point => point.ts >= cutoff);
+    return filtered.length > 1 ? filtered : history;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function deriveProductNameFromUrl(url) {
+    if (!url) return 'Product';
+    try {
+        const parsed = new URL(url);
+        const parts = parsed.pathname.split('/').filter(Boolean).map(part => decodeURIComponent(part));
+
+        // Choose the best slug-like segment, not IDs/route tokens like p, dp, gp, product.
+        const ignored = new Set(['p', 'dp', 'gp', 'product', 'products', 'itm']);
+        let candidate = '';
+        for (const part of parts) {
+            const cleanedPart = part.replace(/\?.*$/, '').trim();
+            if (!cleanedPart || ignored.has(cleanedPart.toLowerCase())) continue;
+            const isLikelyId = /^[A-Za-z0-9_-]{6,}$/.test(cleanedPart) && !cleanedPart.includes('-');
+            if (isLikelyId) continue;
+            if (cleanedPart.length > candidate.length) candidate = cleanedPart;
+        }
+
+        candidate = candidate
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b(online|best|prices?|india)\b/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (candidate.length >= 6) {
+            return candidate.slice(0, 120);
+        }
+        return parsed.hostname.replace(/^www\./, '');
+    } catch (error) {
+        return 'Product';
+    }
+}
+
+function getDisplayProductName(tracker) {
+    const raw = (tracker?.productName || '').trim();
+    const genericNames = ['product', 'add to your order', 'shop online', 'buy online'];
+    if (raw && !genericNames.includes(raw.toLowerCase())) {
+        return raw;
+    }
+    return deriveProductNameFromUrl(tracker?.url);
+}
+
+function getSiteSlugFromUrl(url) {
+    const urlLower = String(url || '').toLowerCase();
+    if (urlLower.includes('amazon')) return 'amazon';
+    if (urlLower.includes('flipkart')) return 'flipkart';
+    if (urlLower.includes('myntra')) return 'myntra';
+    if (urlLower.includes('ajio')) return 'ajio';
+    if (urlLower.includes('meesho')) return 'meesho';
+    if (urlLower.includes('snapdeal')) return 'snapdeal';
+    if (urlLower.includes('tatacliq')) return 'tatacliq';
+    if (urlLower.includes('reliancedigital')) return 'reliancedigital';
+    if (urlLower.includes('nykaa')) return 'nykaa';
+    if (urlLower.includes('croma')) return 'croma';
+    if (urlLower.includes('jiomart')) return 'jiomart';
+    if (urlLower.includes('vijaysales')) return 'vijaysales';
+    if (urlLower.includes('shopsy')) return 'shopsy';
+    if (urlLower.includes('firstcry')) return 'firstcry';
+    if (urlLower.includes('pepperfry')) return 'pepperfry';
+    if (urlLower.includes('1mg') || urlLower.includes('tata1mg')) return 'tata1mg';
+    if (urlLower.includes('bigbasket')) return 'bigbasket';
+    return 'generic';
+}
+
+function getCompanyLogoImg(url, className = 'company-logo') {
+    const slug = getSiteSlugFromUrl(url);
+    return '<img class="' + className + '" src="/static/brand/sites/' + slug + '.png?v=4" alt="" onerror="this.onerror=null;this.src=\'/static/brand/sites/generic.png?v=4\';">';
+}
+
+function getCompanyLogoHtml(url) {
+    return getCompanyLogoImg(url, 'company-logo');
+}
+
+function isCelebrationEnabled() {
+    const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+    return settings.celebrationsEnabled !== false;
+}
+
+function setCelebrationEnabled(enabled) {
+    const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+    settings.celebrationsEnabled = !!enabled;
+    localStorage.setItem('settings', JSON.stringify(settings));
+}
+
+function enableLogoFallbacks() {
+    const fallbackSrc = '/static/brand/sites/generic.png?v=4';
+    document.querySelectorAll('.supported-site-logo').forEach((img) => {
+        if (img.src && !img.src.includes('?v=')) {
+            img.src = img.src + '?v=4';
+        }
+        img.onerror = () => {
+            img.onerror = null;
+            img.src = fallbackSrc;
+        };
+    });
+}
 
 // ==================== CELEBRATION FUNCTIONS ====================
 
@@ -43,6 +241,8 @@ function initCelebration() {
 }
 
 function showCelebration(tracker) {
+    if (!isCelebrationEnabled()) return;
+
     const modal = document.getElementById('celebration-modal');
     const productNameEl = document.getElementById('celeb-product-name');
     const savingsEl = document.getElementById('celeb-savings');
@@ -111,6 +311,12 @@ function buyNowFromCelebration() {
     if (celebrationTracker && celebrationTracker.url) {
         window.open(celebrationTracker.url, '_blank');
     }
+}
+
+function stopCelebrations() {
+    setCelebrationEnabled(false);
+    closeCelebration();
+    showToast('success', 'Celebrations stopped. You can still track price updates.');
 }
 
 function checkPriceReached(tracker) {
@@ -306,16 +512,19 @@ async function createTracker(url, targetPrice, currentPrice, productName, curren
             throw new Error('Failed to create tracker');
         }
         
+        const responseData = await response.json();
         const newTracker = {
-            id: Date.now(),
+            id: responseData.id || Date.now(),
             url: url,
             productName: productName,
             currentPrice: currentPrice,
             targetPrice: parseFloat(targetPrice),
             currency: currency,
             currencySymbol: currencySymbol,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            priceHistory: []
         };
+        addPriceHistoryPoint(newTracker, currentPrice);
         
         trackers.push(newTracker);
         localStorage.setItem('trackers', JSON.stringify(trackers));
@@ -338,16 +547,148 @@ async function createTracker(url, targetPrice, currentPrice, productName, curren
 
 // ==================== TRACKERS DISPLAY ====================
 
-function loadTrackers() {
-    trackers = JSON.parse(localStorage.getItem('trackers') || '[]');
+async function loadTrackers() {
+    // Prefer server data when logged in, fallback to local cache.
+    try {
+        const response = await fetch(API_BASE_URL + '/api/trackers', {
+            credentials: 'include'
+        });
+        if (response.ok) {
+            trackers = mergeTrackersWithLocalHistory(await response.json());
+            localStorage.setItem('trackers', JSON.stringify(trackers));
+            renderTrackers();
+            updateStats();
+            return;
+        }
+    } catch (error) {
+        console.warn('Could not load trackers from server, using local cache');
+    }
+
+    trackers = JSON.parse(localStorage.getItem('trackers') || '[]').map(tracker => {
+        tracker.priceHistory = normalizeHistory(tracker.priceHistory);
+        addPriceHistoryPoint(tracker, tracker.currentPrice);
+        return tracker;
+    });
     renderTrackers();
     updateStats();
+}
+
+function buildLiveTrackingChartSvg(tracker, rangeKey = 'all') {
+    const history = getHistoryForLiveRange(tracker, rangeKey);
+    const pointsSource = history.length > 1
+        ? history
+        : [
+            { ts: Date.now() - 120000, price: tracker.currentPrice || 0 },
+            { ts: Date.now(), price: tracker.currentPrice || 0 }
+        ];
+
+    const width = 320;
+    const height = 220;
+    const padX = 14;
+    const padTop = 20;
+    const padBottom = 18;
+    const plotW = width - padX * 2;
+    const plotH = height - padTop - padBottom;
+
+    const prices = pointsSource.map(p => Number(p.price) || 0);
+    const target = Number(tracker.targetPrice) || prices[prices.length - 1] || 0;
+    const min = Math.min(...prices, target);
+    const max = Math.max(...prices, target);
+    const range = max - min || 1;
+
+    const points = pointsSource.map((point, index) => {
+        const x = padX + (index / Math.max(pointsSource.length - 1, 1)) * plotW;
+        const y = padTop + (1 - ((point.price - min) / range)) * plotH;
+        return { x, y };
+    });
+
+    const path = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const area = `${padX},${height - padBottom} ${path} ${padX + plotW},${height - padBottom}`;
+    const targetY = padTop + (1 - ((target - min) / range)) * plotH;
+    const startPrice = prices[0] || 0;
+    const endPrice = prices[prices.length - 1] || 0;
+    const trendPct = startPrice > 0 ? ((endPrice - startPrice) / startPrice) * 100 : 0;
+    const trendClass = trendPct > 0.2 ? 'up' : trendPct < -0.2 ? 'down' : 'flat';
+
+    const maxLabel = (tracker.currencySymbol || '$') + max.toFixed(2);
+    const midValue = min + range / 2;
+    const midLabel = (tracker.currencySymbol || '$') + midValue.toFixed(2);
+    const minLabel = (tracker.currencySymbol || '$') + min.toFixed(2);
+    const midY = padTop + plotH / 2;
+
+    return {
+        svg: '<svg viewBox="0 0 ' + width + ' ' + height + '" class="lpt-chart-svg" preserveAspectRatio="none">' +
+            '<line x1="' + padX + '" y1="' + padTop + '" x2="' + (padX + plotW) + '" y2="' + padTop + '" class="lpt-grid-line" />' +
+            '<line x1="' + padX + '" y1="' + midY.toFixed(1) + '" x2="' + (padX + plotW) + '" y2="' + midY.toFixed(1) + '" class="lpt-grid-line" />' +
+            '<line x1="' + padX + '" y1="' + (height - padBottom) + '" x2="' + (padX + plotW) + '" y2="' + (height - padBottom) + '" class="lpt-grid-line" />' +
+            '<polyline points="' + area + '" class="lpt-area" />' +
+            '<line x1="' + padX + '" y1="' + targetY.toFixed(1) + '" x2="' + (padX + plotW) + '" y2="' + targetY.toFixed(1) + '" class="lpt-target-line ' + trendClass + '" />' +
+            '<polyline points="' + path + '" class="lpt-line" />' +
+            '<text x="' + (padX + 2) + '" y="' + (padTop - 5) + '" class="lpt-y-label">' + maxLabel + '</text>' +
+            '<text x="' + (padX + 2) + '" y="' + (midY - 5).toFixed(1) + '" class="lpt-y-label">' + midLabel + '</text>' +
+            '<text x="' + (padX + 2) + '" y="' + (height - padBottom - 5) + '" class="lpt-y-label">' + minLabel + '</text>' +
+            '</svg>',
+        targetY,
+        trendClass
+    };
+}
+
+function renderLiveTrackingSection() {
+    const container = document.getElementById('live-price-grid');
+    if (!container) return;
+
+    if (!trackers.length) {
+        container.innerHTML = '<div class="live-empty">Create trackers to see live price cards.</div>';
+        return;
+    }
+
+    container.innerHTML = trackers.map(tracker => {
+        const current = Number(tracker.currentPrice || 0);
+        const target = Number(tracker.targetPrice || current);
+        const fullHistory = normalizeHistory(tracker.priceHistory);
+        const firstTracked = fullHistory.length ? Number(fullHistory[0].price || current) : current;
+        const growthPct = firstTracked > 0 ? ((current - firstTracked) / firstTracked) * 100 : 0;
+        const growthAmount = current - firstTracked;
+        const diffText = Math.abs(growthPct).toFixed(1) + '% (' + (tracker.currencySymbol || '$') + Math.abs(growthAmount).toFixed(2) + ') from first tracked (' + (tracker.currencySymbol || '$') + firstTracked.toFixed(2) + ')';
+        const trendClass = growthPct > 0.2 ? 'up' : growthPct < -0.2 ? 'down' : 'flat';
+        const trendIcon = trendClass === 'up' ? 'fa-caret-up' : trendClass === 'down' ? 'fa-caret-down' : 'fa-minus';
+        const selectedRange = livePeriodByTracker[String(tracker.id)] || 'all';
+        const chart = buildLiveTrackingChartSvg(tracker, selectedRange);
+        const markerTop = Math.max(24, Math.min(194, chart.targetY));
+
+        const displayName = getDisplayProductName(tracker);
+        return '<article class="live-phone-card">' +
+            '<div class="live-phone-shell">' +
+            '<div class="live-topbar"><span class="live-clock">9:41</span><span class="live-brand">' + escapeHtml(displayName.slice(0, 18).toUpperCase()) + '</span><i class="fa fa-bell"></i></div>' +
+            '<div class="live-card-body">' +
+            '<div class="live-logo">' + getCompanyLogoImg(tracker.url, 'live-company-logo') + '</div>' +
+            '<p class="live-title">Live Price</p>' +
+            '<p class="live-product-name">' + escapeHtml(displayName) + '</p>' +
+            '<div class="live-target-price">' + (tracker.currencySymbol || '$') + current.toFixed(2) + '</div>' +
+            '<div class="live-diff ' + trendClass + '"><i class="fa ' + trendIcon + '"></i> ' + diffText + '</div>' +
+            '<div class="live-chart-wrap">' + chart.svg + '<button class="live-marker ' + chart.trendClass + '" style="top:' + markerTop.toFixed(1) + 'px;"><i class="fa fa-arrows-v"></i></button></div>' +
+            '<div class="live-periods">' +
+            '<button class="live-period-btn ' + (selectedRange === '1d' ? 'active' : '') + '" onclick="setLiveGraphPeriod(' + tracker.id + ', \'1d\')">1d</button>' +
+            '<button class="live-period-btn ' + (selectedRange === '1m' ? 'active' : '') + '" onclick="setLiveGraphPeriod(' + tracker.id + ', \'1m\')">1m</button>' +
+            '<button class="live-period-btn ' + (selectedRange === '1y' ? 'active' : '') + '" onclick="setLiveGraphPeriod(' + tracker.id + ', \'1y\')">1y</button>' +
+            '<button class="live-period-btn ' + (selectedRange === '5y' ? 'active' : '') + '" onclick="setLiveGraphPeriod(' + tracker.id + ', \'5y\')">5y</button>' +
+            '<button class="live-period-btn ' + (selectedRange === 'all' ? 'active' : '') + '" onclick="setLiveGraphPeriod(' + tracker.id + ', \'all\')">All</button>' +
+            '</div>' +
+            '<button class="live-action-btn" onclick="viewTrends(' + tracker.id + ')">View Detailed Trend <i class="fa fa-check"></i></button>' +
+            '</div></div></article>';
+    }).join('');
+}
+
+function setLiveGraphPeriod(trackerId, rangeKey) {
+    livePeriodByTracker[String(trackerId)] = rangeKey;
+    renderLiveTrackingSection();
 }
 
 function renderTrackers() {
     const container = document.getElementById('trackers-list');
     if (trackers.length === 0) {
         container.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fa fa-rocket"></i></div><h3>No trackers yet!</h3><p>Create your first price alert to start saving money</p><button class="action-btn" onclick="switchView(\'new-alert\')"><span class="btn-text">Create Tracker</span><span class="btn-icon"><i class="fa fa-plus"></i></span></button></div>';
+        renderLiveTrackingSection();
         return;
     }
     
@@ -360,31 +701,17 @@ function renderTrackers() {
         });
     }
     
-    // Function to get company logo based on URL
-    function getCompanyLogo(url) {
-        if (!url) return '<i class="fa fa-shopping-bag"></i>';
-        const urlLower = url.toLowerCase();
-        if (urlLower.includes('amazon')) return '<img src="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg" alt="Amazon" class="company-logo" onerror="this.style.display=\'none\'; this.parentElement.innerHTML=\'<i class=\\\'fa fa-amazon\\\'></i>\'">';
-        if (urlLower.includes('flipkart')) return '<img src="https://upload.wikimedia.org/wikipedia/commons/2/2f/Flipkart_logo.svg" alt="Flipkart" class="company-logo" onerror="this.style.display=\'none\'; this.parentElement.innerHTML=\'<i class=\\\'fa fa-shopping-cart\\\'></i>\'">';
-        if (urlLower.includes('myntra')) return '<img src="https://upload.wikimedia.org/wikipedia/commons/2/24/Myntra_logo.svg" alt="Myntra" class="company-logo" onerror="this.style.display=\'none\'; this.parentElement.innerHTML=\'<i class=\\\'fa fa-tag\\\'></i>\'">';
-        if (urlLower.includes('ajio')) return '<i class="fa fa-shopping-bag"></i>';
-        if (urlLower.includes('meesho')) return '<i class="fa fa-mobile"></i>';
-        if (urlLower.includes('snapdeal')) return '<i class="fa fa-shopping-cart"></i>';
-        if (urlLower.includes('tatacliq') || urlLower.includes('tata')) return '<i class="fa fa-store"></i>';
-        if (urlLower.includes('reliance') || urlLower.includes('reliancedigital')) return '<i class="fa fa-laptop"></i>';
-        if (urlLower.includes('ebay')) return '<i class="fa fa-shopping-bag"></i>';
-        return '<i class="fa fa-shopping-bag"></i>';
-    }
-    
     container.innerHTML = filteredTrackers.map(tracker => {
         const status = tracker.currentPrice <= tracker.targetPrice ? 'reached' : 'active';
         const statusClass = status === 'reached' ? 'status-reached' : 'status-active';
         const statusText = status === 'reached' ? 'Target Reached!' : 'Active';
         
-        return '<div class="tracker-card" data-id="' + tracker.id + '"><div class="tracker-header"><div class="tracker-info"><div class="tracker-logo">' + getCompanyLogo(tracker.url) + '</div><h4 class="tracker-name">' + (tracker.productName || 'Product') + '</h4></div><div class="tracker-checkbox" onclick="event.stopPropagation(); toggleSelect(' + tracker.id + ')"><i class="fa fa-check" style="display: none;"></i></div></div><div class="tracker-url">' + tracker.url + '</div><div class="tracker-prices"><div class="price-info current"><span class="price-label">Current</span><span class="price-amount">' + (tracker.currencySymbol || '$') + tracker.currentPrice + '</span></div><div class="price-info target"><span class="price-label">Target</span><span class="price-amount">' + (tracker.currencySymbol || '$') + tracker.targetPrice + '</span></div><div class="price-status ' + statusClass + '">' + statusText + '</div></div><div class="tracker-actions"><button class="tracker-action" onclick="viewTrends(' + tracker.id + ')"><i class="fa fa-chart-line"></i> Trends</button><button class="tracker-action" onclick="refreshPrice(' + tracker.id + ')"><i class="fa fa-refresh"></i> Refresh</button><button class="tracker-action delete" onclick="deleteTracker(' + tracker.id + ')"><i class="fa fa-trash"></i></button></div>';
+        const displayName = getDisplayProductName(tracker);
+        return '<div class="tracker-card" data-id="' + tracker.id + '"><div class="tracker-header"><div class="tracker-info"><div class="tracker-logo">' + getCompanyLogoHtml(tracker.url) + '</div><h4 class="tracker-name">' + escapeHtml(displayName) + '</h4></div><div class="tracker-checkbox" onclick="event.stopPropagation(); toggleSelect(' + tracker.id + ')"><i class="fa fa-check" style="display: none;"></i></div></div><div class="tracker-url"><a href="' + tracker.url + '" target="_blank" rel="noopener noreferrer">' + tracker.url + '</a></div><div class="tracker-prices"><div class="price-info current"><span class="price-label">Current</span><span class="price-amount">' + (tracker.currencySymbol || '$') + tracker.currentPrice + '</span></div><div class="price-info target"><span class="price-label">Target</span><span class="price-amount">' + (tracker.currencySymbol || '$') + tracker.targetPrice + '</span></div><div class="price-status ' + statusClass + '">' + statusText + '</div></div><div class="tracker-sparkline"><div class="sparkline-header"><span>Live Trend</span><small>' + (tracker.priceHistory?.length || 0) + ' pts</small></div>' + buildSparklineSvg(tracker.priceHistory) + '</div><div class="tracker-actions"><button class="tracker-action" onclick="viewTrends(' + tracker.id + ')"><i class="fa fa-chart-line"></i> Trends</button><button class="tracker-action" onclick="refreshPrice(' + tracker.id + ')"><i class="fa fa-refresh"></i> Refresh</button><button class="tracker-action delete" onclick="deleteTracker(' + tracker.id + ')"><i class="fa fa-trash"></i></button></div>';
     }).join('');
     
     updateCounts();
+    renderLiveTrackingSection();
 }
 
 function updateStats() {
@@ -438,6 +765,26 @@ function sortTrackers() {
 
 // ==================== PRICE REFRESH ====================
 
+async function saveTrackerUpdateToServer(tracker) {
+    if (!tracker || !tracker.id) return;
+    try {
+        await fetch(API_BASE_URL + '/api/trackers', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                id: tracker.id,
+                currentPrice: tracker.currentPrice,
+                productName: tracker.productName,
+                currency: tracker.currency || 'USD',
+                currencySymbol: tracker.currencySymbol || '$'
+            })
+        });
+    } catch (error) {
+        console.warn('Failed to persist tracker update to server');
+    }
+}
+
 async function refreshPrice(trackerId) {
     const tracker = trackers.find(t => t.id === trackerId);
     if (!tracker) return;
@@ -468,6 +815,9 @@ async function refreshPrice(trackerId) {
             const oldPrice = tracker.currentPrice;
             tracker.currentPrice = data.price;
             tracker.productName = data.productName || tracker.productName;
+            tracker.currency = data.currency || tracker.currency;
+            tracker.currencySymbol = data.currency_symbol || tracker.currencySymbol;
+            addPriceHistoryPoint(tracker, tracker.currentPrice);
             
             // Check if target just reached
             if (checkPriceReached(tracker) && oldPrice > tracker.targetPrice) {
@@ -478,9 +828,14 @@ async function refreshPrice(trackerId) {
             }
             
             localStorage.setItem('trackers', JSON.stringify(trackers));
+            await saveTrackerUpdateToServer(tracker);
             showToast('success', 'Price updated: ' + (data.currency_symbol || '$') + data.price);
             renderTrackers();
             updateStats();
+            if (currentTracker && String(currentTracker.id) === String(tracker.id)) {
+                currentTracker = tracker;
+                generateChart(tracker);
+            }
         } else {
             showToast('error', data.error || 'Failed to refresh price');
         }
@@ -493,8 +848,18 @@ async function refreshPrice(trackerId) {
     }
 }
 
-function deleteTracker(trackerId) {
+async function deleteTracker(trackerId) {
     if (!confirm('Are you sure you want to delete this tracker?')) return;
+    try {
+        await fetch(API_BASE_URL + '/api/trackers', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ id: trackerId })
+        });
+    } catch (error) {
+        console.warn('Failed to delete tracker on server');
+    }
     trackers = trackers.filter(t => t.id !== trackerId);
     localStorage.setItem('trackers', JSON.stringify(trackers));
     renderTrackers();
@@ -514,6 +879,7 @@ function toggleSelect(trackerId) {
 function viewTrends(trackerId) {
     const tracker = trackers.find(t => t.id === trackerId);
     if (!tracker) return;
+    addPriceHistoryPoint(tracker, tracker.currentPrice);
     currentTracker = tracker;
     switchView('price-trends');
     
@@ -525,48 +891,73 @@ function viewTrends(trackerId) {
     const savings = tracker.currentPrice - tracker.targetPrice;
     document.getElementById('savings-amount').textContent = (tracker.currencySymbol || '$') + savings.toFixed(2);
     
-    generateChart(tracker);
+    generateChart(tracker, currentTrendPeriod);
     
     const prediction = tracker.currentPrice <= tracker.targetPrice ? 'Price is at or below your target!' : 'Price may drop further';
     document.getElementById('prediction-text').textContent = prediction;
     document.getElementById('confidence').textContent = '85%';
 }
 
-function generateChart(tracker) {
+function generateChart(tracker, period = currentTrendPeriod) {
     const chartContainer = document.querySelector('.chart-main');
-    const days = 7;
-    const data = [];
-    let basePrice = tracker.currentPrice;
-    
-    for (let i = 0; i < days; i++) {
-        const variation = (Math.random() - 0.5) * basePrice * 0.1;
-        data.push(basePrice + variation);
-    }
-    data[days - 1] = tracker.currentPrice;
-    
-    const maxPrice = Math.max(...data);
-    chartContainer.innerHTML = '<div class="chart-placeholder"><div class="chart-line">' + 
-        data.map(price => '<div class="chart-bar" style="height: ' + ((price / maxPrice) * 150) + 'px;" title="' + price.toFixed(2) + '"></div>').join('') + 
-        '</div><div class="chart-labels">' + 
-        Array.from({length: days}, (_, i) => { 
-            const date = new Date(); 
-            date.setDate(date.getDate() - (days - 1 - i)); 
-            return '<span>' + date.toLocaleDateString('en-US', {month: 'short', day: 'numeric'}) + '</span>'; 
-        }).join('') + '</div>';
-    
-    document.getElementById('trend-lowest').textContent = (tracker.currencySymbol || '$') + Math.min(...data).toFixed(2);
-    document.getElementById('trend-highest').textContent = (tracker.currencySymbol || '$') + Math.max(...data).toFixed(2);
+    const history = getHistoryForPeriod(tracker, period);
+    const usableHistory = history.length > 1 ? history : [{ ts: Date.now() - 60000, price: tracker.currentPrice }, { ts: Date.now(), price: tracker.currentPrice }];
+    const prices = usableHistory.map(point => point.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const priceRange = maxPrice - minPrice || 1;
+
+    const width = 920;
+    const height = 250;
+    const padTop = 24;
+    const padBottom = 34;
+    const padX = 24;
+    const plotWidth = width - padX * 2;
+    const plotHeight = height - padTop - padBottom;
+    const count = usableHistory.length;
+
+    const points = usableHistory.map((point, index) => {
+        const x = padX + (index / Math.max(count - 1, 1)) * plotWidth;
+        const y = padTop + (1 - (point.price - minPrice) / priceRange) * plotHeight;
+        return { x, y, price: point.price };
+    });
+
+    const linePoints = points.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
+    const areaPoints = `${padX},${height - padBottom} ${linePoints} ${padX + plotWidth},${height - padBottom}`;
+    const trendClass = prices[prices.length - 1] <= prices[0] ? 'down' : 'up';
+
+    const startLabel = new Date(usableHistory[0].ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const endLabel = new Date(usableHistory[usableHistory.length - 1].ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    const midValue = minPrice + priceRange / 2;
+    chartContainer.innerHTML = '<svg viewBox="0 0 ' + width + ' ' + height + '" class="trend-svg" preserveAspectRatio="none">' +
+        '<line x1="' + padX + '" y1="' + (height - padBottom) + '" x2="' + (padX + plotWidth) + '" y2="' + (height - padBottom) + '" class="trend-axis" />' +
+        '<line x1="' + padX + '" y1="' + padTop + '" x2="' + padX + '" y2="' + (height - padBottom) + '" class="trend-axis" />' +
+        '<line x1="' + padX + '" y1="' + (padTop + plotHeight / 2).toFixed(1) + '" x2="' + (padX + plotWidth) + '" y2="' + (padTop + plotHeight / 2).toFixed(1) + '" class="trend-grid" />' +
+        '<polyline points="' + areaPoints + '" class="trend-area ' + trendClass + '" />' +
+        '<polyline points="' + linePoints + '" class="trend-line ' + trendClass + '" />' +
+        '<circle cx="' + points[points.length - 1].x.toFixed(2) + '" cy="' + points[points.length - 1].y.toFixed(2) + '" r="4" class="trend-last-point" />' +
+        '<text x="' + (padX + 4) + '" y="' + (padTop - 6) + '" class="trend-y-label">' + (tracker.currencySymbol || '$') + maxPrice.toFixed(2) + '</text>' +
+        '<text x="' + (padX + 4) + '" y="' + (padTop + plotHeight / 2 - 6).toFixed(1) + '" class="trend-y-label">' + (tracker.currencySymbol || '$') + midValue.toFixed(2) + '</text>' +
+        '<text x="' + (padX + 4) + '" y="' + (height - padBottom - 6) + '" class="trend-y-label">' + (tracker.currencySymbol || '$') + minPrice.toFixed(2) + '</text>' +
+        '<text x="' + padX + '" y="' + (height - 10) + '" class="trend-label">' + startLabel + '</text>' +
+        '<text x="' + (padX + plotWidth - 64) + '" y="' + (height - 10) + '" class="trend-label">' + endLabel + '</text>' +
+        '</svg>';
+
+    document.getElementById('trend-lowest').textContent = (tracker.currencySymbol || '$') + minPrice.toFixed(2);
+    document.getElementById('trend-highest').textContent = (tracker.currencySymbol || '$') + maxPrice.toFixed(2);
     document.getElementById('trend-since').textContent = new Date(tracker.createdAt).toLocaleDateString();
     document.getElementById('buy-now-btn').style.display = tracker.currentPrice <= tracker.targetPrice ? 'flex' : 'none';
     document.getElementById('buy-now-btn').onclick = () => window.open(tracker.url, '_blank');
 }
 
 function setTimePeriod(period) {
+    currentTrendPeriod = period;
     document.querySelectorAll('.time-btn').forEach(btn => {
         btn.classList.remove('active');
-        if (btn.textContent.toLowerCase().includes(period)) btn.classList.add('active');
+        if (btn.textContent.toLowerCase().includes(period.replace('d', ''))) btn.classList.add('active');
     });
-    if (currentTracker) generateChart(currentTracker);
+    if (currentTracker) generateChart(currentTracker, period);
 }
 
 // ==================== TOAST NOTIFICATIONS ====================
@@ -651,11 +1042,14 @@ function showToast(type, message) {
 // ==================== SETTINGS ====================
 
 function saveSettings() {
+    const existingSettings = JSON.parse(localStorage.getItem('settings') || '{}');
     localStorage.setItem('settings', JSON.stringify({
         pushNotifications: document.getElementById('push-notifications').checked,
         emailAlerts: document.getElementById('email-alerts').checked,
         darkMode: document.getElementById('dark-mode').checked,
         compactView: document.getElementById('compact-view').checked,
+        autoRefreshEnabled: document.getElementById('auto-refresh-enabled')?.checked ?? true,
+        celebrationsEnabled: existingSettings.celebrationsEnabled !== false,
         refreshInterval: document.getElementById('refresh-interval').value,
         autoDelete: document.getElementById('auto-delete').value,
         dropPercentage: document.getElementById('drop-percentage').value
@@ -679,6 +1073,7 @@ function loadSettings() {
     if (settings.emailAlerts !== undefined) document.getElementById('email-alerts').checked = settings.emailAlerts;
     if (settings.darkMode !== undefined) document.getElementById('dark-mode').checked = settings.darkMode;
     if (settings.compactView !== undefined) document.getElementById('compact-view').checked = settings.compactView;
+    if (settings.autoRefreshEnabled !== undefined) document.getElementById('auto-refresh-enabled').checked = settings.autoRefreshEnabled;
     if (settings.refreshInterval !== undefined) document.getElementById('refresh-interval').value = settings.refreshInterval;
     if (settings.autoDelete !== undefined) document.getElementById('auto-delete').value = settings.autoDelete;
     if (settings.dropPercentage !== undefined) document.getElementById('drop-percentage').value = settings.dropPercentage;
@@ -708,7 +1103,11 @@ function importData(input) {
         try {
             const imported = JSON.parse(e.target.result);
             if (Array.isArray(imported)) {
-                trackers = imported;
+                trackers = imported.map(tracker => {
+                    tracker.priceHistory = normalizeHistory(tracker.priceHistory);
+                    addPriceHistoryPoint(tracker, tracker.currentPrice);
+                    return tracker;
+                });
                 localStorage.setItem('trackers', JSON.stringify(trackers));
                 renderTrackers();
                 updateStats();
@@ -815,18 +1214,36 @@ function saveWhatsAppNumber() {
     closeModal('whatsapp-modal');
 }
 
-// Initialize settings on load
-loadSettings();
+async function initializeApp() {
+    if (appInitialized) return;
+    appInitialized = true;
+
+    enableLogoFallbacks();
+    loadSettings();
+    await loadTrackers();
+    setupNavigation();
+    loadUserData();
+    initTilt();
+    initCelebration();
+    startAutoRefresh();
+    addManualRefreshButton();
+}
 
 // ==================== AUTO-REFRESH ALERTER ====================
 
 let autoRefreshInterval = null;
 let lastRefreshTime = null;
+let isAutoRefreshing = false;
 
 function startAutoRefresh() {
-    const settings = JSON.parse(localStorage.getItem('settings') || '{}');
-    const intervalMinutes = parseInt(settings.refreshInterval || '15');
-    const intervalMs = intervalMinutes * 60 * 1000;
+    const enabled = document.getElementById('auto-refresh-enabled')?.checked ?? true;
+    if (!enabled) {
+        stopAutoRefresh();
+        return;
+    }
+
+    const intervalSeconds = 5;
+    const intervalMs = intervalSeconds * 1000;
     
     // Clear any existing interval
     if (autoRefreshInterval) {
@@ -835,12 +1252,15 @@ function startAutoRefresh() {
     
     // Start new interval
     autoRefreshInterval = setInterval(() => {
-        autoRefreshAllPrices();
+        autoRefreshAllPrices({ silent: true });
     }, intervalMs);
+
+    // Run one refresh immediately so users see live updates without waiting.
+    autoRefreshAllPrices({ silent: true });
     
     // Update UI to show auto-refresh is active
-    updateAutoRefreshUI(intervalMinutes);
-    console.log(`Auto-refresh started: every ${intervalMinutes} minutes`);
+    updateAutoRefreshUI(intervalSeconds);
+    console.log(`Auto-refresh started: every ${intervalSeconds} seconds`);
 }
 
 function stopAutoRefresh() {
@@ -851,53 +1271,69 @@ function stopAutoRefresh() {
     console.log('Auto-refresh stopped');
 }
 
-async function autoRefreshAllPrices() {
-    if (trackers.length === 0) return;
+async function autoRefreshAllPrices(options = {}) {
+    const { silent = false } = options;
+    if (trackers.length === 0 || isAutoRefreshing) return;
     
     console.log('Auto-refreshing all prices...');
     lastRefreshTime = new Date();
+    isAutoRefreshing = true;
     
     let updatedCount = 0;
-    for (const tracker of trackers) {
-        try {
-            const response = await fetch(API_BASE_URL + '/get-price', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: tracker.url })
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                const oldPrice = tracker.currentPrice;
-                tracker.currentPrice = data.price;
-                tracker.productName = data.productName || tracker.productName;
-                
-                // Check if target just reached
-                if (checkPriceReached(tracker) && oldPrice > tracker.targetPrice) {
-                    celebrationTracker = tracker;
-                    showCelebration(tracker);
+    try {
+        for (const tracker of trackers) {
+            try {
+                const response = await fetch(API_BASE_URL + '/get-price', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: tracker.url })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const oldPrice = tracker.currentPrice;
+                    tracker.currentPrice = data.price;
+                    tracker.productName = data.productName || tracker.productName;
+                    tracker.currency = data.currency || tracker.currency;
+                    tracker.currencySymbol = data.currency_symbol || tracker.currencySymbol;
+                    addPriceHistoryPoint(tracker, tracker.currentPrice);
+
+                    // Check if target just reached
+                    if (checkPriceReached(tracker) && oldPrice > tracker.targetPrice) {
+                        celebrationTracker = tracker;
+                        showCelebration(tracker);
+                    }
+                    await saveTrackerUpdateToServer(tracker);
+                    updatedCount++;
                 }
-                updatedCount++;
+            } catch (error) {
+                console.error(`Failed to refresh price for ${tracker.url}:`, error);
             }
-        } catch (error) {
-            console.error(`Failed to refresh price for ${tracker.url}:`, error);
         }
-    }
-    
-    // Save updated trackers
-    localStorage.setItem('trackers', JSON.stringify(trackers));
-    
-    // Update UI
-    renderTrackers();
-    updateStats();
-    
-    // Show notification
-    if (updatedCount > 0) {
-        showToast('success', `Auto-refreshed ${updatedCount} tracker(s)`);
+        
+        // Save updated trackers
+        localStorage.setItem('trackers', JSON.stringify(trackers));
+        
+        // Update UI
+        renderTrackers();
+        updateStats();
+        if (currentTracker) {
+            const updatedCurrent = trackers.find(t => String(t.id) === String(currentTracker.id));
+            if (updatedCurrent) {
+                currentTracker = updatedCurrent;
+                generateChart(updatedCurrent);
+            }
+        }
+        
+        if (!silent && updatedCount > 0) {
+            showToast('success', `Auto-refreshed ${updatedCount} tracker(s)`);
+        }
+    } finally {
+        isAutoRefreshing = false;
     }
 }
 
-function updateAutoRefreshUI(intervalMinutes) {
+function updateAutoRefreshUI(intervalSeconds) {
     // Add auto-refresh indicator to the sidebar
     const sidebarStats = document.querySelector('.sidebar-stats');
     if (sidebarStats) {
@@ -917,7 +1353,7 @@ function updateAutoRefreshUI(intervalMinutes) {
     // Update refresh timer display
     const refreshTimer = document.getElementById('refresh-timer');
     if (refreshTimer) {
-        let secondsRemaining = intervalMinutes * 60;
+        let secondsRemaining = intervalSeconds;
         refreshTimer.innerHTML = `<i class="fa fa-sync fa-spin"></i> ${formatTime(secondsRemaining)}`;
         
         // Update timer every second
@@ -927,7 +1363,7 @@ function updateAutoRefreshUI(intervalMinutes) {
         window.refreshTimerInterval = setInterval(() => {
             secondsRemaining--;
             if (secondsRemaining <= 0) {
-                secondsRemaining = intervalMinutes * 60;
+                secondsRemaining = intervalSeconds;
             }
             const timerEl = document.getElementById('refresh-timer');
             if (timerEl) {
@@ -968,16 +1404,8 @@ function addManualRefreshButton() {
     }
 }
 
-// Start auto-refresh on page load
-document.addEventListener('DOMContentLoaded', () => {
-    loadTrackers();
-    setupNavigation();
-    loadUserData();
-    initTilt();
-    initCelebration();
-    startAutoRefresh();
-    addManualRefreshButton();
-});
+// Start app on page load
+document.addEventListener('DOMContentLoaded', initializeApp);
 
 // Stop auto-refresh when leaving the page
 window.addEventListener('beforeunload', () => {
@@ -988,6 +1416,7 @@ window.addEventListener('beforeunload', () => {
 
 function toggleAutoRefresh() {
     const enabled = document.getElementById('auto-refresh-enabled').checked;
+    saveSettings();
     if (enabled) {
         startAutoRefresh();
         showToast('success', 'Auto-refresh enabled');

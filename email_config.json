@@ -1,9 +1,9 @@
 {
-  "enabled": false,
+  "enabled": true,
   "smtp_server": "smtp.gmail.com",
   "smtp_port": 587,
-  "smtp_email": "madhavalr4321@gmail.com",
-  "smtp_password": "Srinivasulu@1967",
+  "smtp_email": "pricealerterai@gmail.com",
+  "smtp_password": "PASTE_GMAIL_APP_PASSWORD_HERE",
   "from_name": "AI Price Alert",
   "provider": "gmail",
   "use_tls": true,
