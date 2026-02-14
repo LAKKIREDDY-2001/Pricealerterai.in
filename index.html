@@ -582,6 +582,36 @@
             font-size: 0.95rem;
             margin: 0;
         }
+
+        /* Premium motion + 3D enhancements */
+        .reveal-item {
+            opacity: 0;
+            transform: translateY(22px);
+            transition: opacity 0.55s ease, transform 0.55s ease;
+        }
+
+        .reveal-item.in-view {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .feature-card,
+        .howto-card,
+        .testimonial-card,
+        .faq-item,
+        .step {
+            transform-style: preserve-3d;
+            will-change: transform;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .feature-card:hover,
+        .howto-card:hover,
+        .testimonial-card:hover,
+        .faq-item:hover,
+        .step:hover {
+            box-shadow: 0 18px 38px rgba(0, 0, 0, 0.14);
+        }
         
         /* Features Section */
         .features {
@@ -1020,6 +1050,37 @@
             nav.classList.toggle('active');
         }
 
+        function initLandingEnhancements() {
+            const revealNodes = document.querySelectorAll(
+                '.hero, .howto-section, .features, .how-it-works, .stats-section, .testimonials, .faq-section, .cta-section, .landing-footer, .feature-card, .howto-card, .testimonial-card, .faq-item, .step'
+            );
+            revealNodes.forEach((node) => node.classList.add('reveal-item'));
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('in-view');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.12 });
+            revealNodes.forEach((node) => observer.observe(node));
+
+            if (!window.matchMedia('(hover: hover)').matches) return;
+            const tiltCards = document.querySelectorAll('.feature-card, .howto-card, .testimonial-card, .faq-item, .step');
+            tiltCards.forEach((card) => {
+                card.addEventListener('mousemove', (e) => {
+                    const r = card.getBoundingClientRect();
+                    const x = (e.clientX - r.left) / r.width - 0.5;
+                    const y = (e.clientY - r.top) / r.height - 0.5;
+                    card.style.transform = `rotateX(${(-y * 5).toFixed(2)}deg) rotateY(${(x * 6).toFixed(2)}deg) translateY(-2px)`;
+                });
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = '';
+                });
+            });
+        }
+
         document.querySelectorAll('.auth-link').forEach((link) => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -1027,6 +1088,8 @@
                 if (target) window.location.assign(target);
             });
         });
+
+        document.addEventListener('DOMContentLoaded', initLandingEnhancements);
     </script>
 </body>
 </html>

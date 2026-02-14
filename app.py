@@ -18,13 +18,18 @@ import smtplib
 
 app = Flask(__name__)
 executor = ThreadPoolExecutor(max_workers=3)
-app.secret_key = os.urandom(24)
+# Use stable secret key in production (set SECRET_KEY env var), fallback for local.
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 CORS(app, supports_credentials=True, origins="*")
 
 DATABASE = 'database.db'
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"}), 200
 
 # Email Configuration
 def load_email_config():
