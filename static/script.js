@@ -1588,6 +1588,7 @@ function openAIAssistant() {
                     <label>Your Query</label>
                     <textarea id="assistant-query" class="product-input" rows="5" placeholder="Type your query..."></textarea>
                 </div>
+                <div id="assistant-reply" class="assistant-reply" style="display:none;"></div>
                 <button class="action-btn" onclick="sendAssistantQuery()">
                     <i class="fa fa-paper-plane"></i> Send Query
                 </button>
@@ -1608,21 +1609,48 @@ function mountAIAssistantWidget() {
     document.body.appendChild(fab);
 }
 
+function buildAssistantReply(query) {
+    const q = String(query || '').toLowerCase();
+    if (q.includes('price') && q.includes('not')) {
+        return 'Try Refresh All or wait 5 seconds for auto-refresh. Also verify product link is correct.';
+    }
+    if (q.includes('signup') || q.includes('sign up') || q.includes('login') || q.includes('sign in')) {
+        return 'Use local app links: /signup and /login on localhost:8081. GitHub Pages is static only.';
+    }
+    if (q.includes('target') || q.includes('alert')) {
+        return 'Set a lower target price than current price. You will be notified when current price reaches target.';
+    }
+    if (q.includes('graph') || q.includes('trend')) {
+        return 'Open Live Price tab to view trend chart. Use 1d/1m/1y/5y/All filters for each product.';
+    }
+    if (q.includes('email') || q.includes('mail')) {
+        return 'For direct emails, configure SMTP app password in email_config.json.';
+    }
+    return 'Thanks for your query. I can help with signup, alerts, trackers, live price graph, and settings.';
+}
+
 function sendAssistantQuery() {
     const queryEl = document.getElementById('assistant-query');
     const query = queryEl ? queryEl.value.trim() : '';
+    const replyEl = document.getElementById('assistant-reply');
     if (!query) {
         showToast('error', 'Please enter your query');
         return;
     }
-    closeModal('ai-assistant-modal');
-    showFeedbackModal();
+    if (replyEl) {
+        replyEl.style.display = 'block';
+        replyEl.innerHTML = '<strong>AI Reply:</strong> ' + escapeHtml(buildAssistantReply(query));
+    }
     setTimeout(() => {
-        const typeEl = document.getElementById('feedback-type');
-        const messageEl = document.getElementById('feedback-message');
-        const payload = '[AI Query] ' + query;
-        if (typeEl) typeEl.value = 'other';
-        if (messageEl) messageEl.value = payload;
-        submitFeedback(payload);
-    }, 100);
+        closeModal('ai-assistant-modal');
+        showFeedbackModal();
+        setTimeout(() => {
+            const typeEl = document.getElementById('feedback-type');
+            const messageEl = document.getElementById('feedback-message');
+            const payload = '[AI Query] ' + query + '\n\n[AI Reply] ' + buildAssistantReply(query);
+            if (typeEl) typeEl.value = 'other';
+            if (messageEl) messageEl.value = payload;
+            submitFeedback(payload);
+        }, 100);
+    }, 1200);
 }

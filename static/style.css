@@ -1701,6 +1701,17 @@ body {
     max-width: 560px;
 }
 
+.assistant-reply {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin: 10px 0 14px;
+    color: #334155;
+    font-size: 0.95rem;
+    line-height: 1.45;
+}
+
 .modal h3 {
     font-size: 1.4rem;
     color: var(--text-main);
