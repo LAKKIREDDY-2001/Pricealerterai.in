@@ -69,7 +69,7 @@
                     <i class="fa fa-rocket"></i>
                     Start Free Tracking
                 </a>
-                <a href="./index.html" class="btn-hero secondary">
+                <a href="#how-to-use" class="btn-hero secondary">
                     <i class="fa fa-book"></i>
                     How It Works
                 </a>
@@ -96,6 +96,28 @@
                     <span><img src="./static/brand/sites/tata1mg.png?v=4" alt="Tata 1mg logo" loading="lazy"> Tata 1mg</span>
                     <span><img src="./static/brand/sites/bigbasket.png?v=4" alt="BigBasket logo" loading="lazy"> BigBasket</span>
                 </div>
+            </div>
+        </section>
+
+        <section class="howto-section" id="how-to-use">
+            <h2>How To Use</h2>
+            <p class="howto-subtitle">Simple dashboard steps to start tracking and saving.</p>
+            <div class="howto-grid">
+                <article class="howto-card">
+                    <img src="./static/brand/howto-1.svg" alt="Dashboard step 1 screenshot: paste product link" loading="lazy">
+                    <h3>1. Paste Product Link</h3>
+                    <p>Paste any store product URL and start AI tracking.</p>
+                </article>
+                <article class="howto-card">
+                    <img src="./static/brand/howto-2.svg" alt="Dashboard step 2 screenshot: set target price" loading="lazy">
+                    <h3>2. Set Target Price</h3>
+                    <p>Set your expected price and monitor live trend.</p>
+                </article>
+                <article class="howto-card">
+                    <img src="./static/brand/howto-3.svg" alt="Dashboard step 3 screenshot: get alert when target reached" loading="lazy">
+                    <h3>3. Get Instant Alerts</h3>
+                    <p>Receive target reached alerts and buy at best price.</p>
+                </article>
             </div>
         </section>
 
@@ -519,6 +541,56 @@
             object-fit: contain;
             border-radius: 4px;
             flex-shrink: 0;
+        }
+
+        .howto-section {
+            padding: 30px 5% 80px;
+            width: 100%;
+        }
+
+        .howto-section h2 {
+            text-align: center;
+            font-size: clamp(1.8rem, 4vw, 2.4rem);
+            margin-bottom: 10px;
+        }
+
+        .howto-subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 28px;
+        }
+
+        .howto-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 18px;
+        }
+
+        .howto-card {
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        .howto-card img {
+            width: 100%;
+            display: block;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            margin-bottom: 10px;
+        }
+
+        .howto-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 6px;
+        }
+
+        .howto-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin: 0;
         }
         
         /* Features Section */
