@@ -1,174 +1,521 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dashboard - AI Price Alert</title>
-  <link rel="stylesheet" href="./static/style.css">
-  <style>
-    .demo-wrap{max-width:1200px;margin:20px auto;padding:16px}
-    .demo-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-    .demo-card{background:#fff;border-radius:16px;padding:14px;box-shadow:0 12px 30px rgba(0,0,0,.08)}
-    .demo-inputs{display:grid;grid-template-columns:2fr 1fr auto;gap:10px;margin:12px 0}
-    .demo-inputs input{padding:12px;border:1px solid #ddd;border-radius:10px}
-    .btn{border:none;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer}
-    .btn-primary{background:#ff9800;color:#fff}.btn-light{background:#fff;color:#222;border:1px solid #ddd}
-    .stat-grid{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin-top:10px}
-    .tracker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-top:12px}
-    .tracker-title{font-size:16px;font-weight:800;line-height:1.3}
-    .tracker-url{font-size:12px;word-break:break-all}
-    .tracker-row{display:flex;justify-content:space-between;margin-top:8px}
-    .pill{display:inline-block;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700}
-    .pill.ok{background:#e7f9ee;color:#15803d}.pill.wait{background:#fff3cd;color:#92400e}
-    @media (max-width:768px){.demo-inputs{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(2,1fr)}}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - AI Price Alert</title>
+    <link rel="stylesheet" href="./static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Dashboard-specific overrides */
+        .browser-window {
+            height: 100vh;
+            max-width: 100%;
+            border-radius: 0;
+        }
+        
+        body {
+            padding: 0;
+            display: block;
+            align-items: stretch;
+            justify-content: flex-start;
+        }
+        
+        .scene {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-  <div class="scene"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
-  <div class="demo-wrap">
-    <div class="demo-top demo-card">
-      <div>
-        <h2 style="margin:0">AI Price Alert Dashboard</h2>
-        <small id="welcome"></small>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <span id="refreshBadge" class="pill ok">Auto refresh: ON (5s)</span>
-        <button class="btn btn-light" id="toggleRefresh">Pause</button>
-        <button class="btn btn-light" id="logoutBtn">Logout</button>
-      </div>
+    <div class="browser-window">
+        <!-- Browser Header -->
+        <header class="browser-header">
+            <div class="window-dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+            </div>
+            <div class="nav-arrows">
+                <i class="fa fa-arrow-left"></i>
+                <i class="fa fa-arrow-right"></i>
+            </div>
+            <div class="address-bar">
+                <i class="fa fa-lock"></i>
+                <span>aipricealert.com/dashboard</span>
+            </div>
+            <div class="user-menu">
+                <span id="welcome">User</span>
+                <a href="./index.html" class="logout-btn" id="logoutBtn">
+                    <i class="fa fa-sign-out-alt"></i>
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Viewport -->
+        <div class="viewport">
+            <!-- Sidebar -->
+            <aside class="app-sidebar">
+                <!-- Logo Section -->
+                <div class="app-logo">
+                    <div class="logo-icon">
+                        <i class="fa fa-bell"></i>
+                    </div>
+                    <div class="logo-text">
+                        <span class="logo-name">AI Price Alert</span>
+                        <span class="logo-tagline">Smart Tracking</span>
+                    </div>
+                </div>
+
+                <!-- New Alert Button -->
+                <button class="action-btn" onclick="focusInput()" style="width: 100%; margin-bottom: 24px; justify-content: center;">
+                    <i class="fa fa-plus"></i>
+                    New Alert
+                </button>
+
+                <!-- Navigation Items -->
+                <nav class="nav-items">
+                    <a class="nav-item active" data-view="trackers">
+                        <i class="fa fa-list"></i>
+                        My Trackers
+                    </a>
+                    <a class="nav-item" data-view="live">
+                        <i class="fa fa-bolt"></i>
+                        Live Price
+                    </a>
+                    <a class="nav-item" data-view="trends">
+                        <i class="fa fa-chart-line"></i>
+                        Price Trends
+                    </a>
+                    <a class="nav-item" data-view="settings">
+                        <i class="fa fa-cog"></i>
+                        Settings
+                    </a>
+                </nav>
+
+                <!-- Sidebar Stats Card -->
+                <div class="sidebar-stats">
+                    <div class="stat-item">
+                        <span class="stat-value" id="sidebarTotal">0</span>
+                        <span class="stat-label">Trackers</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="sidebarActive">0</span>
+                        <span class="stat-label">Active</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="app-main">
+                <!-- Top Bar -->
+                <div class="trackers-header">
+                    <h2>
+                        <i class="fa fa-bell"></i>
+                        Start Tracking
+                    </h2>
+                    <div class="trackers-actions">
+                        <div class="auto-refresh-active" id="autoRefreshBadge">
+                            <i class="fa fa-sync"></i>
+                            Auto: ON
+                        </div>
+                        <button class="btn-secondary small" id="toggleAutoBtn">
+                            <i class="fa fa-pause"></i>
+                            Pause
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Section -->
+                <div class="input-container" style="max-width: 100%; padding-top: 0; margin-bottom: 32px;">
+                    <div class="demo-card" style="padding: 24px;">
+                        <div class="demo-inputs">
+                            <input type="url" id="productUrl" class="product-input" placeholder="Paste product URL from Amazon, Flipkart, Myntra, Ajio, Meesho..." />
+                            <input type="number" id="targetPrice" class="product-input" style="width: 180px;" placeholder="Target price" min="1" step="0.01" />
+                            <button class="btn btn-primary" id="addTrackerBtn">
+                                <i class="fa fa-rocket"></i>
+                                Start AI Tracking
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                            <button class="btn btn-secondary small" id="refreshAllBtn">
+                                <i class="fa fa-sync"></i>
+                                Refresh All
+                            </button>
+                            <a href="./index.html" class="btn btn-secondary small" style="text-decoration: none;">
+                                <i class="fa fa-home"></i>
+                                Back to Home
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Supported Marketplaces -->
+                <div class="supported-sites" style="margin-bottom: 32px;">
+                    <span class="tag"><i class="fab fa-amazon"></i> Amazon</span>
+                    <span class="tag"><i class="fa fa-shopping-bag"></i> Flipkart</span>
+                    <span class="tag"><i class="fa fa-tshirt"></i> Myntra</span>
+                    <span class="tag"><i class="fa fa-tag"></i> Ajio</span>
+                    <span class="tag"><i class="fa fa-box"></i> Meesho</span>
+                    <span class="tag"><i class="fa fa-shopping-cart"></i> Snapdeal</span>
+                    <span class="tag"><i class="fa fa-store"></i> Tata CliQ</span>
+                    <span class="tag"><i class="fa fa-plug"></i> Reliance Digital</span>
+                    <span class="tag"><i class="fa fa-heart"></i> Nykaa</span>
+                    <span class="tag"><i class="fa fa-laptop"></i> Croma</span>
+                    <span class="tag"><i class="fa fa-shopping-basket"></i> JioMart</span>
+                    <span class="tag"><i class="fa fa-store-alt"></i> Shopsy</span>
+                    <span class="tag"><i class="fa fa-couch"></i> Pepperfry</span>
+                    <span class="tag"><i class="fa fa-carrot"></i> BigBasket</span>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-cards">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fa fa-list"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-number" id="statTotal">0</span>
+                            <span class="stat-desc">Total Trackers</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fa fa-bolt"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-number" id="statActive">0</span>
+                            <span class="stat-desc">Active</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon gold">
+                            <i class="fa fa-check-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-number" id="statReached">0</span>
+                            <span class="stat-desc">Target Reached</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: var(--gradient-purple);">
+                            <i class="fa fa-percentage"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-number" id="statSavings">0%</span>
+                            <span class="stat-desc">Avg Savings</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trackers Section -->
+                <section class="trackers-section">
+                    <div class="section-header">
+                        <h2 class="section-title">
+                            <i class="fa fa-list"></i>
+                            Your Trackers
+                        </h2>
+                        <button class="btn-danger small" id="clearAllBtn" style="padding: 10px 16px;">
+                            <i class="fa fa-trash"></i>
+                            Clear All
+                        </button>
+                    </div>
+                    <div class="trackers-grid" id="trackerGrid">
+                        <!-- Trackers will be rendered here -->
+                    </div>
+                </section>
+            </main>
+        </div>
     </div>
 
-    <div class="demo-card" style="margin-top:12px">
-      <div class="demo-inputs">
-        <input id="productUrl" placeholder="Paste product URL from Amazon / Flipkart / Myntra / Ajio / Meesho..." />
-        <input id="targetPrice" type="number" min="1" step="0.01" placeholder="Target price" />
-        <button class="btn btn-primary" id="addTrackerBtn">Start Tracking</button>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-light" id="refreshAllBtn">Refresh All</button>
-        <a class="btn btn-light" href="./index.html" style="text-decoration:none">Back to Home</a>
-      </div>
+    <!-- Toast Notification -->
+    <div id="toast">
+        <div class="toast-icon success">
+            <i class="fa fa-check"></i>
+        </div>
+        <div class="toast-content">
+            <strong>Success!</strong>
+            <span id="toastMsg">Tracker added successfully</span>
+        </div>
     </div>
 
-    <div class="stat-grid" id="stats"></div>
-    <div class="tracker-grid" id="trackerGrid"></div>
-  </div>
+    <script>
+        // User authentication check
+        const user = JSON.parse(localStorage.getItem('pa_current_user') || 'null');
+        if (!user) {
+            window.location.href = './login.html';
+        }
 
-  <script>
-    const user = JSON.parse(localStorage.getItem('pa_current_user') || 'null');
-    if (!user) window.location.href = './login.html';
+        // Set welcome message
+        document.getElementById('welcome').textContent = user.username || user.email;
 
-    document.getElementById('welcome').textContent = 'Welcome, ' + (user.username || user.email);
+        // Storage key for user's trackers
+        const key = 'pa_trackers_' + user.email;
+        let trackers = JSON.parse(localStorage.getItem(key) || '[]');
+        let refreshTimer = null;
+        let autoOn = true;
 
-    const key = 'pa_trackers_' + user.email;
-    let trackers = JSON.parse(localStorage.getItem(key) || '[]');
-    let refreshTimer = null;
-    let autoOn = true;
+        // Save trackers to localStorage
+        const save = () => localStorage.setItem(key, JSON.stringify(trackers));
 
-    const save = () => localStorage.setItem(key, JSON.stringify(trackers));
+        // Parse product name from URL
+        const parseName = (url) => {
+            try {
+                const u = new URL(url);
+                const path = decodeURIComponent(u.pathname.replace(/\/+$/, ''));
+                const slug = path.split('/').filter(Boolean).pop() || u.hostname;
+                return slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).slice(0, 110);
+            } catch {
+                return 'Product';
+            }
+        };
 
-    const parseName = (url) => {
-      try {
-        const u = new URL(url);
-        const path = decodeURIComponent(u.pathname.replace(/\/+$/, ''));
-        const slug = path.split('/').filter(Boolean).pop() || u.hostname;
-        return slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).slice(0, 110);
-      } catch { return 'Product'; }
-    };
+        // Get store name from URL
+        const getStoreName = (url) => {
+            try {
+                const hostname = new URL(url).hostname.toLowerCase();
+                if (hostname.includes('amazon')) return 'Amazon';
+                if (hostname.includes('flipkart')) return 'Flipkart';
+                if (hostname.includes('myntra')) return 'Myntra';
+                if (hostname.includes('ajio')) return 'Ajio';
+                if (hostname.includes('meesho')) return 'Meesho';
+                if (hostname.includes('snapdeal')) return 'Snapdeal';
+                if (hostname.includes('tatacliq')) return 'Tata CliQ';
+                if (hostname.includes('reliance')) return 'Reliance Digital';
+                if (hostname.includes('croma')) return 'Croma';
+                if (hostname.includes('nykaa')) return 'Nykaa';
+                return 'Store';
+            } catch {
+                return 'Store';
+            }
+        };
 
-    const renderStats = () => {
-      const total = trackers.length;
-      const reached = trackers.filter(t => t.current <= t.target).length;
-      const active = total - reached;
-      const avg = total ? (trackers.reduce((a,t)=>a + ((t.current - t.target) / t.current * 100),0) / total) : 0;
-      document.getElementById('stats').innerHTML = [
-        ['Total', total], ['Active', active], ['Target Reached', reached], ['Avg Savings', avg > 0 ? avg.toFixed(1) + '%' : '0%']
-      ].map(([k,v]) => `<div class="demo-card"><div style="font-size:12px;color:#666">${k}</div><div style="font-size:26px;font-weight:800">${v}</div></div>`).join('');
-    };
+        // Render stats
+        const renderStats = () => {
+            const total = trackers.length;
+            const reached = trackers.filter(t => t.current <= t.target).length;
+            const active = total - reached;
+            const avgSavings = total ? (trackers.reduce((a, t) => {
+                const savings = ((t.current - t.target) / t.current * 100);
+                return a + (savings > 0 ? savings : 0);
+            }, 0) / total) : 0;
 
-    const render = () => {
-      renderStats();
-      const box = document.getElementById('trackerGrid');
-      if (!trackers.length) {
-        box.innerHTML = '<div class="demo-card">No trackers yet. Add first product link.</div>';
-        return;
-      }
-      box.innerHTML = trackers.map((t, i) => {
-        const reached = t.current <= t.target;
-        return `<div class="demo-card">
-          <div class="tracker-title">${t.name}</div>
-          <a class="tracker-url" href="${t.url}" target="_blank" rel="noopener">${t.url}</a>
-          <div class="tracker-row"><span>CURRENT</span><strong>₹${t.current.toFixed(2)}</strong></div>
-          <div class="tracker-row"><span>TARGET</span><strong>₹${t.target.toFixed(2)}</strong></div>
-          <div class="tracker-row"><span class="pill ${reached ? 'ok':'wait'}">${reached ? 'Target Reached' : 'Active'}</span>
-            <button class="btn btn-light" onclick="removeTracker(${i})">Delete</button></div>
-        </div>`;
-      }).join('');
-    };
+            // Update sidebar stats
+            document.getElementById('sidebarTotal').textContent = total;
+            document.getElementById('sidebarActive').textContent = active;
 
-    const randomize = (v) => {
-      const drift = (Math.random() - 0.5) * Math.max(3, v * 0.03);
-      return Math.max(1, v + drift);
-    };
+            // Update main stats
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statActive').textContent = active;
+            document.getElementById('statReached').textContent = reached;
+            document.getElementById('statSavings').textContent = avgSavings > 0 ? avgSavings.toFixed(0) + '%' : '0%';
+        };
 
-    const refreshAll = () => {
-      trackers = trackers.map(t => ({ ...t, current: randomize(t.current) }));
-      save();
-      render();
-    };
+        // Render trackers
+        const render = () => {
+            renderStats();
+            const box = document.getElementById('trackerGrid');
+            
+            if (!trackers.length) {
+                box.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa fa-bell-slash empty-icon"></i>
+                        <h3>No Trackers Yet</h3>
+                        <p>Add your first product URL above to start tracking prices</p>
+                        <button class="action-btn" onclick="focusInput()">
+                            <i class="fa fa-plus"></i>
+                            Add First Tracker
+                        </button>
+                    </div>
+                `;
+                return;
+            }
 
-    window.removeTracker = (idx) => {
-      trackers.splice(idx, 1);
-      save();
-      render();
-    };
+            box.innerHTML = trackers.map((t, i) => {
+                const reached = t.current <= t.target;
+                const savings = ((t.current - t.target) / t.current * 100).toFixed(1);
+                
+                return `
+                    <div class="tracker-card">
+                        <div class="tracker-header">
+                            <div class="tracker-info">
+                                <div class="tracker-logo">
+                                    <i class="fa fa-shopping-bag"></i>
+                                </div>
+                                <div>
+                                    <div class="tracker-name">${t.name}</div>
+                                    <div class="tracker-url">
+                                        <i class="fa fa-store"></i> ${getStoreName(t.url)}
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="tracker-delete" onclick="removeTracker(${i})" title="Delete">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                        <a href="${t.url}" target="_blank" class="tracker-url" style="margin-bottom: 16px; display: block;">
+                            ${t.url}
+                        </a>
+                        <div class="tracker-prices">
+                            <div class="price-info current">
+                                <span class="price-label">Current Price</span>
+                                <span class="price-amount">₹${t.current.toFixed(2)}</span>
+                            </div>
+                            <div class="price-info target">
+                                <span class="price-label">Target Price</span>
+                                <span class="price-amount">₹${t.target.toFixed(2)}</span>
+                            </div>
+                            <div class="price-status ${reached ? 'status-reached' : 'status-active'}">
+                                ${reached ? '<i class="fa fa-check-circle"></i> Target Reached' : '<i class="fa fa-clock"></i> Active'}
+                            </div>
+                        </div>
+                        <div class="tracker-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+                            <span style="font-size: 12px; color: var(--text-secondary);">
+                                <i class="fa fa-calendar"></i> ${new Date(t.createdAt).toLocaleDateString()}
+                            </span>
+                            <span style="font-size: 12px; color: ${reached ? 'var(--success)' : 'var(--accent-orange)'};">
+                                ${reached ? 'You save ₹' + (t.current - t.target).toFixed(2) : savings + '% below current'}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        };
 
-    document.getElementById('addTrackerBtn').addEventListener('click', () => {
-      const url = document.getElementById('productUrl').value.trim();
-      const target = parseFloat(document.getElementById('targetPrice').value);
-      if (!url || !/^https?:\/\//i.test(url) || !Number.isFinite(target) || target <= 0) return;
-      const base = Math.max(target + 10, target * (1 + (Math.random() * 0.18 + 0.02)));
-      trackers.unshift({
-        name: parseName(url),
-        url,
-        target,
-        current: base,
-        createdAt: Date.now()
-      });
-      document.getElementById('productUrl').value = '';
-      document.getElementById('targetPrice').value = '';
-      save();
-      render();
-    });
+        // Randomize price for demo
+        const randomize = (v) => {
+            const drift = (Math.random() - 0.5) * Math.max(3, v * 0.03);
+            return Math.max(1, v + drift);
+        };
 
-    document.getElementById('refreshAllBtn').addEventListener('click', refreshAll);
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      localStorage.removeItem('pa_current_user');
-      window.location.href = './index.html';
-    });
+        // Refresh all trackers
+        const refreshAll = () => {
+            trackers = trackers.map(t => ({ ...t, current: randomize(t.current) }));
+            save();
+            render();
+        };
 
-    const startAuto = () => {
-      clearInterval(refreshTimer);
-      refreshTimer = setInterval(refreshAll, 5000);
-    };
+        // Remove tracker
+        window.removeTracker = (idx) => {
+            if (confirm('Are you sure you want to delete this tracker?')) {
+                trackers.splice(idx, 1);
+                save();
+                render();
+                showToast('Tracker deleted successfully');
+            }
+        };
 
-    document.getElementById('toggleRefresh').addEventListener('click', () => {
-      autoOn = !autoOn;
-      const badge = document.getElementById('refreshBadge');
-      const btn = document.getElementById('toggleRefresh');
-      if (autoOn) {
+        // Clear all trackers
+        window.clearAll = () => {
+            if (confirm('Are you sure you want to delete all trackers? This action cannot be undone.')) {
+                trackers = [];
+                save();
+                render();
+                showToast('All trackers cleared');
+            }
+        };
+
+        // Focus input
+        const focusInput = () => {
+            document.getElementById('productUrl').focus();
+        };
+
+        // Show toast notification
+        const showToast = (msg) => {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = msg;
+            toast.classList.add('active');
+            setTimeout(() => toast.classList.remove('active'), 3000);
+        };
+
+        // Add tracker button click
+        document.getElementById('addTrackerBtn').addEventListener('click', () => {
+            const url = document.getElementById('productUrl').value.trim();
+            const target = parseFloat(document.getElementById('targetPrice').value);
+            
+            if (!url || !/^https?:\/\//i.test(url)) {
+                alert('Please enter a valid product URL');
+                return;
+            }
+            if (!Number.isFinite(target) || target <= 0) {
+                alert('Please enter a valid target price');
+                return;
+            }
+
+            // Generate a random current price (higher than target for demo)
+            const base = Math.max(target + 10, target * (1 + (Math.random() * 0.18 + 0.02)));
+            
+            trackers.unshift({
+                name: parseName(url),
+                url,
+                target,
+                current: base,
+                createdAt: Date.now()
+            });
+            
+            document.getElementById('productUrl').value = '';
+            document.getElementById('targetPrice').value = '';
+            save();
+            render();
+            showToast('Tracker added successfully! Starting AI monitoring...');
+        });
+
+        // Enter key for target price
+        document.getElementById('targetPrice').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('addTrackerBtn').click();
+        });
+
+        // Refresh all button
+        document.getElementById('refreshAllBtn').addEventListener('click', refreshAll);
+
+        // Logout button
+        document.getElementById('logoutBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            if (confirm('Are you sure you want to logout?')) {
+                localStorage.removeItem('pa_current_user');
+                window.location.href = './index.html';
+            }
+        });
+
+        // Auto refresh toggle
+        const startAuto = () => {
+            clearInterval(refreshTimer);
+            refreshTimer = setInterval(refreshAll, 5000);
+        };
+
+        document.getElementById('toggleAutoBtn').addEventListener('click', () => {
+            autoOn = !autoOn;
+            const badge = document.getElementById('autoRefreshBadge');
+            const btn = document.getElementById('toggleAutoBtn');
+            
+            if (autoOn) {
+                startAuto();
+                badge.innerHTML = '<i class="fa fa-sync"></i> Auto: ON';
+                btn.innerHTML = '<i class="fa fa-pause"></i> Pause';
+            } else {
+                clearInterval(refreshTimer);
+                badge.innerHTML = '<i class="fa fa-pause"></i> Auto: OFF';
+                btn.innerHTML = '<i class="fa fa-play"></i> Resume';
+            }
+        });
+
+        // Clear all button
+        document.getElementById('clearAllBtn').addEventListener('click', window.clearAll);
+
+        // Navigation items
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Initial render
+        render();
         startAuto();
-        badge.textContent = 'Auto refresh: ON (5s)';
-        btn.textContent = 'Pause';
-      } else {
-        clearInterval(refreshTimer);
-        badge.textContent = 'Auto refresh: OFF';
-        btn.textContent = 'Resume';
-      }
-    });
-
-    render();
-    startAuto();
-  </script>
+    </script>
 </body>
 </html>
+
