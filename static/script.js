@@ -1227,7 +1227,7 @@ async function initializeApp() {
     loadUserData();
     initTilt();
     initCelebration();
-    mountAIAssistantWidget();
+    mountFeedbackWidget();
     startAutoRefresh();
     addManualRefreshButton();
 }
@@ -1627,15 +1627,15 @@ function appendChatMessage(role, text) {
     thread.scrollTop = thread.scrollHeight;
 }
 
-function mountAIAssistantWidget() {
+function mountFeedbackWidget() {
     if (document.getElementById('ai-assistant-fab')) return;
     const fab = document.createElement('button');
     fab.id = 'ai-assistant-fab';
     fab.className = 'ai-assistant-fab';
-    fab.innerHTML = '<i class="fa fa-comments"></i><span class="ai-assistant-label">Chat Us</span>';
-    fab.setAttribute('aria-label', 'Chat Us');
-    fab.setAttribute('title', 'Chat Us');
-    fab.onclick = openAIAssistant;
+    fab.innerHTML = '<i class="fa fa-comment"></i><span class="ai-assistant-label">Feedback</span>';
+    fab.setAttribute('aria-label', 'Feedback');
+    fab.setAttribute('title', 'Feedback');
+    fab.onclick = showFeedbackModal;
     document.body.appendChild(fab);
 }
 
