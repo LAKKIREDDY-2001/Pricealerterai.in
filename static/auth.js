@@ -63,9 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initTilt() {
-    const tiltRoots = document.querySelectorAll('.tilt-root');
-    if (!tiltRoots.length) return;
-    if (window.matchMedia('(hover: none)').matches) return;
+    // Disabled to avoid cursor/jitter issues on auth pages.
+    return;
 
     tiltRoots.forEach((root) => {
         let rect = null;
@@ -151,14 +150,15 @@ async function handleSignup(e) {
         }
         
         if (response.ok) {
-            // Store signup token and show verification section
-            signupToken = data.signupToken;
-            showVerificationSection(email, phone);
+            showToast('success', data.success || 'Account created successfully');
+            setTimeout(() => {
+                window.location.href = data.redirect || '/login';
+            }, 500);
         } else {
             showError(data.error || 'Failed to send OTP. Please try again.');
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<span>Continue to Verification</span><i class="fa fa-arrow-right"></i>';
+                submitBtn.innerHTML = '<span>Create Account</span><i class="fa fa-user-plus"></i>';
             }
         }
     } catch (error) {
@@ -166,7 +166,7 @@ async function handleSignup(e) {
         showError('Cannot connect to signup service. Ensure Flask is running on http://localhost:8081 and try again.');
         if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.innerHTML = '<span>Continue to Verification</span><i class="fa fa-arrow-right"></i>';
+            submitBtn.innerHTML = '<span>Create Account</span><i class="fa fa-user-plus"></i>';
         }
     }
 }
