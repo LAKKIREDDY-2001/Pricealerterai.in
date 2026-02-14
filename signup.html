@@ -146,9 +146,14 @@
 
     <script>
         // Clear old test data if needed (for development/testing)
-        if (window.location.search.includes('clear=true')) {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('clear') === 'true') {
             localStorage.removeItem('pa_users_v2');
             localStorage.removeItem('pa_current_user');
+            localStorage.removeItem('pa_trackers_');
+            // Remove the query param to clean URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+            alert('Test data cleared! You can now create a new account.');
         }
         
         const usersKey = 'pa_users_v2';
