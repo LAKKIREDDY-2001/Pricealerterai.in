@@ -102,10 +102,24 @@
                     <div class="social-section">
                         <h4>Follow Us</h4>
                         <div class="social-links">
-                            <a href="#" title="Twitter"><i class="fa fa-twitter"></i></a>
-                            <a href="#" title="Facebook"><i class="fa fa-facebook"></i></a>
-                            <a href="#" title="Instagram"><i class="fa fa-instagram"></i></a>
-                            <a href="#" title="LinkedIn"><i class="fa fa-linkedin"></i></a>
+                            <a href="mailto:pricealerterai@gmail.com" title="Email" aria-label="Email">
+                                <img src="/static/brand/social/email.svg" alt="Email">
+                            </a>
+                            <a href="tel:+919999999999" title="Phone" aria-label="Phone">
+                                <img src="/static/brand/social/phone.svg" alt="Phone">
+                            </a>
+                            <a href="https://wa.me/919999999999" target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="WhatsApp">
+                                <img src="/static/brand/social/whatsapp.svg" alt="WhatsApp">
+                            </a>
+                            <a href="https://t.me/pricealerterai" target="_blank" rel="noopener noreferrer" title="Telegram" aria-label="Telegram">
+                                <img src="/static/brand/social/telegram.svg" alt="Telegram">
+                            </a>
+                            <a href="https://instagram.com/pricealerterai" target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Instagram">
+                                <img src="/static/brand/social/instagram.svg" alt="Instagram">
+                            </a>
+                            <a href="https://pinterest.com/pricealerterai" target="_blank" rel="noopener noreferrer" title="Pinterest" aria-label="Pinterest">
+                                <img src="/static/brand/social/pinterest.svg" alt="Pinterest">
+                            </a>
                         </div>
                 </aside>
             </div>
@@ -351,18 +365,27 @@
             width: 44px;
             height: 44px;
             background: var(--bg-light);
-            border-radius: 50%;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: var(--text-secondary);
             text-decoration: none;
             transition: all 0.3s;
+            border: 1px solid rgba(0, 0, 0, 0.08);
         }
         
         .social-links a:hover {
-            background: var(--accent-orange);
-            color: white;
+            background: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .social-links a img {
+            width: 22px;
+            height: 22px;
+            object-fit: contain;
+            display: block;
         }
         
         .faq-section {
