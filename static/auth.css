@@ -248,13 +248,13 @@ h1, h2, h3 {
 }
 
 .auth-btn:hover:not(:disabled) {
-    transform: translateY(-2px) translateZ(2px);
+    transform: none;
     box-shadow: 0 8px 25px rgba(255, 159, 10, 0.4);
 }
 
 .auth-btn:disabled {
     opacity: 0.6;
-    cursor: not-allowed;
+    cursor: pointer;
 }
 
 .error-message {
@@ -728,7 +728,7 @@ h1, h2, h3 {
 .feature:hover,
 .auth-features:hover,
 .auth-card:hover {
-    transform: translateY(-3px) translateZ(4px);
+    transform: none;
 }
 
 .auth-card::before,
