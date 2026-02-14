@@ -626,7 +626,7 @@ def dashboard():
     """Dashboard - requires login"""
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    return render_template('index.html')
+    return render_template('dashboard.html')
 
 @app.route('/logout')
 def logout():
