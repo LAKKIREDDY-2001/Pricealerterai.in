@@ -20,6 +20,18 @@ const getApiBaseUrl = () => {
 const API_BASE_URL = getApiBaseUrl();
 
 document.addEventListener('DOMContentLoaded', () => {
+    if (window.location.hostname.includes('github.io')) {
+        // GitHub Pages cannot call local Flask APIs from HTTPS reliably.
+        if (window.location.pathname.includes('signup')) {
+            window.location.replace('http://localhost:8081/signup');
+            return;
+        }
+        if (window.location.pathname.includes('login')) {
+            window.location.replace('http://localhost:8081/login');
+            return;
+        }
+    }
+
     const signupForm = document.getElementById('signup-form');
     const loginForm = document.getElementById('login-form');
     const forgotPasswordForm = document.getElementById('forgot-password-form');
@@ -151,7 +163,7 @@ async function handleSignup(e) {
         }
     } catch (error) {
         console.error('Signup error:', error);
-        showError('An error occurred. Please try again.');
+        showError('Cannot connect to signup service. Ensure Flask is running on http://localhost:8081 and try again.');
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<span>Continue to Verification</span><i class="fa fa-arrow-right"></i>';
