@@ -3,13 +3,55 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Redirecting to Signup...</title>
-  <meta http-equiv="refresh" content="0; url=https://pricealerter.in/signup">
-  <script>
-    window.location.replace('https://pricealerter.in/signup');
-  </script>
+  <title>Sign Up - AI Price Alert</title>
+  <link rel="stylesheet" href="./static/auth.css">
 </head>
 <body>
-  Redirecting to signup: <a href="https://pricealerter.in/signup">https://pricealerter.in/signup</a>
+  <div class="scene"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="grid"></div></div>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="logo"><i class="fa fa-bell"></i><span>AI Price Alert</span></div>
+        <h1>Create Account</h1>
+        <p>Static mode on pricealerter.in</p>
+      </div>
+      <form id="signup-form" class="auth-form">
+        <div class="form-group"><label>Username</label><input id="username" required></div>
+        <div class="form-group"><label>Email</label><input id="email" type="email" required></div>
+        <div class="form-group"><label>Password</label><input id="password" type="password" minlength="6" required></div>
+        <div class="form-group"><label>Confirm Password</label><input id="confirm" type="password" minlength="6" required></div>
+        <div class="form-options"><label class="checkbox-label"><input type="checkbox" id="terms" required><span>I agree to Terms & Conditions</span></label></div>
+        <button class="auth-btn" type="submit"><span>Create Account</span></button>
+        <div id="error-message" class="error-message" style="display:none"></div>
+      </form>
+      <div class="auth-footer"><p>Already have account? <a href="./login.html">Sign In</a></p></div>
+    </div>
+  </div>
+
+  <script>
+    const usersKey = 'pa_users_v2';
+    const showError = (msg) => {
+      const el = document.getElementById('error-message');
+      el.textContent = msg;
+      el.style.display = 'block';
+    };
+
+    document.getElementById('signup-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const password = document.getElementById('password').value;
+      const confirm = document.getElementById('confirm').value;
+
+      if (password !== confirm) return showError('Passwords do not match.');
+      const users = JSON.parse(localStorage.getItem(usersKey) || '[]');
+      if (users.some(u => u.email === email)) return showError('Account already exists. Please sign in.');
+
+      users.push({ username, email, password, createdAt: Date.now() });
+      localStorage.setItem(usersKey, JSON.stringify(users));
+      localStorage.setItem('pa_last_signup_email', email);
+      window.location.href = './login.html';
+    });
+  </script>
 </body>
 </html>

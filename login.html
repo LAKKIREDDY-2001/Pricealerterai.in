@@ -3,13 +3,53 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Redirecting to Login...</title>
-  <meta http-equiv="refresh" content="0; url=https://pricealerter.in/login">
-  <script>
-    window.location.replace('https://pricealerter.in/login');
-  </script>
+  <title>Login - AI Price Alert</title>
+  <link rel="stylesheet" href="./static/auth.css">
 </head>
 <body>
-  Redirecting to login: <a href="https://pricealerter.in/login">https://pricealerter.in/login</a>
+  <div class="scene"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="grid"></div></div>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="logo"><i class="fa fa-bell"></i><span>AI Price Alert</span></div>
+        <h1>Sign In</h1>
+        <p>Access your trackers on pricealerter.in</p>
+      </div>
+      <form id="login-form" class="auth-form">
+        <div class="form-group"><label>Email</label><input id="email" type="email" required></div>
+        <div class="form-group"><label>Password</label><input id="password" type="password" required></div>
+        <button class="auth-btn" type="submit"><span>Sign In</span></button>
+        <div id="error-message" class="error-message" style="display:none"></div>
+      </form>
+      <div class="auth-footer">
+        <p>Don't have account? <a href="./signup.html">Sign Up</a></p>
+        <p><a href="./forgot-password.html">Forgot Password?</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const usersKey = 'pa_users_v2';
+    const showError = (msg) => {
+      const el = document.getElementById('error-message');
+      el.textContent = msg;
+      el.style.display = 'block';
+    };
+
+    const last = localStorage.getItem('pa_last_signup_email');
+    if (last) document.getElementById('email').value = last;
+
+    document.getElementById('login-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const password = document.getElementById('password').value;
+      const users = JSON.parse(localStorage.getItem(usersKey) || '[]');
+      const user = users.find(u => u.email === email && u.password === password);
+      if (!user) return showError('Invalid email or password.');
+
+      localStorage.setItem('pa_current_user', JSON.stringify({ email: user.email, username: user.username }));
+      window.location.href = './dashboard.html';
+    });
+  </script>
 </body>
 </html>
