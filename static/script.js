@@ -1546,13 +1546,27 @@ async function submitFeedback(prefilledMessage) {
     }
 
     try {
+        const result = await sendFeedbackToMail(type, message, 'dashboard_feedback');
+        showToast('success', result.message || 'Feedback sent to mail');
+        closeModal('feedback-modal');
+    } catch (error) {
+        showToast('error', error.message || 'Failed to send feedback');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa fa-paper-plane"></i> Submit Feedback';
+        }
+    }
+}
+
+async function sendFeedbackToMail(type, message, source) {
+    try {
         const response = await fetch(API_BASE_URL + '/api/feedback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 type,
                 message,
-                source: 'dashboard_feedback',
+                source,
                 name: currentUser?.username || '',
                 email: currentUser?.email || ''
             })
@@ -1561,18 +1575,13 @@ async function submitFeedback(prefilledMessage) {
         if (!response.ok) {
             throw new Error(data.error || 'Unable to send feedback');
         }
-        showToast('success', data.message || 'Feedback sent to mail');
-        closeModal('feedback-modal');
+        return { ok: true, message: data.message || 'Feedback sent to mail' };
     } catch (error) {
         // Direct fallback: open user's mail client with prefilled content.
         const subject = encodeURIComponent('AI Price Alert Feedback [' + type + ']');
-        const body = encodeURIComponent(message + '\n\nSource: dashboard_feedback');
+        const body = encodeURIComponent(message + '\n\nSource: ' + source);
         window.location.href = 'mailto:pricealerterai@gmail.com?subject=' + subject + '&body=' + body;
-        showToast('success', 'Opening mail app to send feedback directly');
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fa fa-paper-plane"></i> Submit Feedback';
-        }
+        return { ok: true, message: 'Opening mail app to send feedback directly' };
     }
 }
 
@@ -1583,24 +1592,39 @@ function openAIAssistant() {
     modal.innerHTML = `
         <div class="modal ai-assistant-modal">
             <div class="modal-header">
-                <h3><i class="fa fa-robot"></i> AI Support Assistant</h3>
+                <h3>
+                    <img class="ai-chat-logo" src="/static/brand/ai-price-alert-old-logo-4k.png" alt="AI Price Alert">
+                    AI Support Assistant
+                </h3>
                 <button class="modal-close" onclick="closeModal('ai-assistant-modal')">&times;</button>
             </div>
             <div class="modal-body">
-                <p>Enter your query. We will send it to feedback mail directly.</p>
-                <div class="form-group">
-                    <label>Your Query</label>
-                    <textarea id="assistant-query" class="product-input" rows="5" placeholder="Type your query..."></textarea>
+                <div class="ai-chat-thread" id="ai-chat-thread">
+                    <div class="ai-chat-msg assistant">
+                        <div class="bubble">Hi, I am AI Support. Ask anything about trackers, alerts, graphs, or account issues.</div>
+                    </div>
                 </div>
-                <div id="assistant-reply" class="assistant-reply" style="display:none;"></div>
-                <button class="action-btn" onclick="sendAssistantQuery()">
-                    <i class="fa fa-paper-plane"></i> Send Query
-                </button>
+                <div class="ai-chat-input-wrap">
+                    <textarea id="assistant-query" class="product-input ai-chat-input" rows="2" placeholder="Type your message..."></textarea>
+                    <button class="action-btn ai-chat-send" onclick="sendAssistantQuery()">
+                        <i class="fa fa-paper-plane"></i> Send
+                    </button>
+                </div>
             </div>
         </div>
     `;
     document.body.appendChild(modal);
     setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function appendChatMessage(role, text) {
+    const thread = document.getElementById('ai-chat-thread');
+    if (!thread) return;
+    const row = document.createElement('div');
+    row.className = 'ai-chat-msg ' + role;
+    row.innerHTML = '<div class="bubble">' + escapeHtml(text) + '</div>';
+    thread.appendChild(row);
+    thread.scrollTop = thread.scrollHeight;
 }
 
 function mountAIAssistantWidget() {
@@ -1638,25 +1662,17 @@ function buildAssistantReply(query) {
 function sendAssistantQuery() {
     const queryEl = document.getElementById('assistant-query');
     const query = queryEl ? queryEl.value.trim() : '';
-    const replyEl = document.getElementById('assistant-reply');
     if (!query) {
         showToast('error', 'Please enter your query');
         return;
     }
-    if (replyEl) {
-        replyEl.style.display = 'block';
-        replyEl.innerHTML = '<strong>AI Reply:</strong> ' + escapeHtml(buildAssistantReply(query));
-    }
-    setTimeout(() => {
-        closeModal('ai-assistant-modal');
-        showFeedbackModal();
-        setTimeout(() => {
-            const typeEl = document.getElementById('feedback-type');
-            const messageEl = document.getElementById('feedback-message');
-            const payload = '[AI Query] ' + query + '\n\n[AI Reply] ' + buildAssistantReply(query);
-            if (typeEl) typeEl.value = 'other';
-            if (messageEl) messageEl.value = payload;
-            submitFeedback(payload);
-        }, 100);
-    }, 1200);
+    const answer = buildAssistantReply(query);
+    appendChatMessage('user', query);
+    if (queryEl) queryEl.value = '';
+    setTimeout(() => appendChatMessage('assistant', answer), 350);
+    setTimeout(async () => {
+        const payload = '[AI Query] ' + query + '\n\n[AI Reply] ' + answer;
+        const result = await sendFeedbackToMail('other', payload, 'ai_chat');
+        appendChatMessage('assistant', result.message || 'Your query was sent to support mail.');
+    }, 450);
 }

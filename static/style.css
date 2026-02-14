@@ -1757,21 +1757,100 @@ body {
 }
 
 .ai-assistant-modal {
-    max-width: 560px;
+    max-width: 620px;
+    width: 94%;
     border: 1px solid rgba(255, 255, 255, 0.35);
     background: linear-gradient(160deg, rgba(255,255,255,0.95), rgba(245,247,252,0.92));
     box-shadow: 0 26px 60px rgba(0, 0, 0, 0.2);
+    padding: 0;
+    overflow: hidden;
 }
 
-.assistant-reply {
+.ai-assistant-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    background: linear-gradient(130deg, #fff7ed, #eef2ff);
+}
+
+.ai-assistant-modal .modal-header h3 {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.ai-chat-logo {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 8px;
+}
+
+.ai-assistant-modal .modal-body {
+    padding: 14px;
+}
+
+.ai-chat-thread {
+    height: 320px;
+    overflow-y: auto;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.ai-chat-msg {
+    display: flex;
+}
+
+.ai-chat-msg.assistant {
+    justify-content: flex-start;
+}
+
+.ai-chat-msg.user {
+    justify-content: flex-end;
+}
+
+.ai-chat-msg .bubble {
+    max-width: 82%;
+    padding: 9px 12px;
     border-radius: 12px;
-    padding: 10px 12px;
-    margin: 10px 0 14px;
+    font-size: 0.92rem;
+    line-height: 1.42;
+}
+
+.ai-chat-msg.assistant .bubble {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
     color: #334155;
-    font-size: 0.95rem;
-    line-height: 1.45;
+}
+
+.ai-chat-msg.user .bubble {
+    background: linear-gradient(135deg, #ff9800, #ff7b00);
+    color: #fff;
+}
+
+.ai-chat-input-wrap {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.ai-chat-input {
+    margin: 0;
+    resize: none;
+}
+
+.ai-chat-send {
+    white-space: nowrap;
+    min-width: 100px;
 }
 
 .modal h3 {
